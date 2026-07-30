@@ -1,0 +1,21 @@
+{
+  "name": "very-good-spreadsheet",
+  "version": "0.1.0",
+  "description": "A very good spreadsheet library",
+  "keywords": [
+    "spreadsheet",
+    "excel",
+    "xlsx"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/christophgockel/very-good-spreadsheet"
+  },
+  "license": "MIT",
+  "author": "Christoph Gockel",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
