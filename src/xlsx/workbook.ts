@@ -9,6 +9,11 @@ import { readStyles } from "./read-styles";
 import { readWorkbook, type WorksheetRef } from "./read-workbook";
 import { Worksheet } from "./worksheet";
 
+export interface WorksheetInfo {
+  readonly name: string;
+  readonly hidden: boolean;
+}
+
 export class Workbook {
   static async open(source: BinarySource): Promise<Workbook> {
     const archive = openZip(await readAllBytes(source));
@@ -23,16 +28,20 @@ export class Workbook {
   constructor(
     private readonly archive: ZipArchive,
     private readonly xml: XmlReader,
-    private readonly worksheets: readonly WorksheetRef[],
+    private readonly refs: readonly WorksheetRef[],
     private readonly context: CellContext,
   ) {}
 
+  get worksheets(): readonly WorksheetInfo[] {
+    return this.refs.map((ref) => ({ name: ref.name, hidden: ref.hidden }));
+  }
+
   get worksheetNames(): readonly string[] {
-    return this.worksheets.map((ref) => ref.name);
+    return this.refs.map((ref) => ref.name);
   }
 
   worksheet(name: string): Worksheet {
-    const ref = this.worksheets.find((candidate) => candidate.name === name);
+    const ref = this.refs.find((candidate) => candidate.name === name);
 
     if (ref === undefined) {
       throw new Error(`Worksheet not found: ${name}`);

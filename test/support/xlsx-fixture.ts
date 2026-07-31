@@ -13,6 +13,7 @@ type CellInput =
 export interface SheetInput {
   readonly name: string;
   readonly rows: readonly (readonly CellInput[])[];
+  readonly hidden?: boolean;
 }
 
 export interface WorkbookOptions {
@@ -78,7 +79,10 @@ export function xlsx(sheets: readonly SheetInput[], options: WorkbookOptions = {
   });
 
   const sheetElements = sheets
-    .map((sheet, i) => `<sheet name="${sheet.name}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
+    .map((sheet, i) => {
+      const state = sheet.hidden ? ' state="hidden"' : "";
+      return `<sheet name="${sheet.name}" sheetId="${i + 1}" r:id="rId${i + 1}"${state}/>`;
+    })
     .join("");
   const workbookProperties = date1904 ? '<workbookPr date1904="1"/>' : "";
   files["xl/workbook.xml"] = strToU8(

@@ -13,11 +13,17 @@ const Attribute = {
   Date1904: "date1904",
   Name: "name",
   RelationshipId: "r:id",
+  State: "state",
 } as const;
+
+// A sheet's state is "visible", "hidden", or "veryHidden". Only the last two
+// keep it out of the tab strip, and veryHidden also hides it from the unhide menu.
+const HIDDEN_STATES: ReadonlySet<string> = new Set(["hidden", "veryHidden"]);
 
 export interface WorksheetRef {
   readonly name: string;
   readonly path: string;
+  readonly hidden: boolean;
 }
 
 export interface WorkbookInfo {
@@ -44,7 +50,8 @@ export async function readWorkbook(archive: ZipArchive, xml: XmlReader): Promise
       }
       const relId = event.attributes[Attribute.RelationshipId];
       const path = relId === undefined ? undefined : relationships.get(relId);
-      worksheets.push({ name, path: path ?? "" });
+      const hidden = HIDDEN_STATES.has(event.attributes[Attribute.State] ?? "");
+      worksheets.push({ name, path: path ?? "", hidden });
     }
   }
 

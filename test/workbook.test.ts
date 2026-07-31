@@ -13,4 +13,18 @@ describe("Workbook", () => {
 
     expect(workbook.worksheetNames).toEqual(["Summary", "Data"]);
   });
+
+  it("reports worksheet visibility", async () => {
+    const workbook = await Workbook.open(
+      xlsx([
+        { name: "Visible", rows: [] },
+        { name: "Hidden", rows: [], hidden: true },
+      ]),
+    );
+
+    expect(workbook.worksheets).toEqual([
+      { name: "Visible", hidden: false },
+      { name: "Hidden", hidden: true },
+    ]);
+  });
 });

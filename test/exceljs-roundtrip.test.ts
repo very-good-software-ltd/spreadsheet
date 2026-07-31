@@ -8,9 +8,8 @@ import { Workbook } from "../src/xlsx/workbook";
 async function readWith(build: (workbook: ExcelJS.Workbook) => void, sheetName: string): Promise<Row[]> {
   const source = new ExcelJS.Workbook();
   build(source);
-  const bytes = new Uint8Array((await source.xlsx.writeBuffer()) as ArrayBuffer);
 
-  const workbook = await Workbook.open(bytes);
+  const workbook = await Workbook.open(await source.xlsx.writeBuffer());
   const rows: Row[] = [];
   for await (const row of workbook.worksheet(sheetName).rows()) {
     rows.push(row);
@@ -73,5 +72,20 @@ describe("reading exceljs-written workbooks", () => {
     }, "Data");
 
     expect(rows[0]?.cells).toEqual([{ ref: "A1", type: "number", value: 10 }]);
+  });
+
+  it("reports a hidden sheet as hidden", async () => {
+    const source = new ExcelJS.Workbook();
+    source.addWorksheet("Visible").addRow(["x"]);
+    const hidden = source.addWorksheet("Hidden");
+    hidden.addRow(["y"]);
+    hidden.state = "hidden";
+
+    const workbook = await Workbook.open(await source.xlsx.writeBuffer());
+
+    expect(workbook.worksheets).toEqual([
+      { name: "Visible", hidden: false },
+      { name: "Hidden", hidden: true },
+    ]);
   });
 });
