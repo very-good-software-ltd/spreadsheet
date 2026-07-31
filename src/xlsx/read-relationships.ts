@@ -3,6 +3,15 @@ import type { ZipArchive } from "../zip/zip-archive";
 
 const RELATIONSHIPS_PART = "xl/_rels/workbook.xml.rels";
 
+const Element = {
+  Relationship: "Relationship",
+} as const;
+
+const Attribute = {
+  Id: "Id",
+  Target: "Target",
+} as const;
+
 export async function readWorkbookRelationships(archive: ZipArchive, xml: XmlReader): Promise<Map<string, string>> {
   const targets = new Map<string, string>();
   if (!archive.has(RELATIONSHIPS_PART)) {
@@ -10,9 +19,9 @@ export async function readWorkbookRelationships(archive: ZipArchive, xml: XmlRea
   }
 
   for await (const event of xml.read(archive.openStream(RELATIONSHIPS_PART))) {
-    if (event.type === "open" && event.name === "Relationship") {
-      const id = event.attributes["Id"];
-      const target = event.attributes["Target"];
+    if (event.type === "open" && event.name === Element.Relationship) {
+      const id = event.attributes[Attribute.Id];
+      const target = event.attributes[Attribute.Target];
       if (id !== undefined && target !== undefined) {
         targets.set(id, resolvePartPath(target));
       }

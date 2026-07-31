@@ -4,6 +4,15 @@ import { readWorkbookRelationships } from "./read-relationships";
 
 const WORKBOOK_PART = "xl/workbook.xml";
 
+const Element = {
+  Sheet: "sheet",
+} as const;
+
+const Attribute = {
+  Name: "name",
+  RelationshipId: "r:id",
+} as const;
+
 export interface WorksheetRef {
   readonly name: string;
   readonly path: string;
@@ -14,9 +23,9 @@ export async function readWorksheetRefs(archive: ZipArchive, xml: XmlReader): Pr
   const refs: WorksheetRef[] = [];
 
   for await (const event of xml.read(archive.openStream(WORKBOOK_PART))) {
-    if (event.type === "open" && event.name === "sheet") {
-      const name = event.attributes["name"];
-      const relId = event.attributes["r:id"];
+    if (event.type === "open" && event.name === Element.Sheet) {
+      const name = event.attributes[Attribute.Name];
+      const relId = event.attributes[Attribute.RelationshipId];
       if (name === undefined) {
         continue;
       }

@@ -3,6 +3,11 @@ import type { ZipArchive } from "../zip/zip-archive";
 
 const SHARED_STRINGS_PART = "xl/sharedStrings.xml";
 
+const Element = {
+  StringItem: "si",
+  Text: "t",
+} as const;
+
 export async function readSharedStrings(archive: ZipArchive, xml: XmlReader): Promise<string[]> {
   const strings: string[] = [];
   if (!archive.has(SHARED_STRINGS_PART)) {
@@ -15,9 +20,9 @@ export async function readSharedStrings(archive: ZipArchive, xml: XmlReader): Pr
   for await (const event of xml.read(archive.openStream(SHARED_STRINGS_PART))) {
     switch (event.type) {
       case "open":
-        if (event.name === "si") {
+        if (event.name === Element.StringItem) {
           current = "";
-        } else if (event.name === "t") {
+        } else if (event.name === Element.Text) {
           inText = true;
         }
         break;
@@ -27,9 +32,9 @@ export async function readSharedStrings(archive: ZipArchive, xml: XmlReader): Pr
         }
         break;
       case "close":
-        if (event.name === "t") {
+        if (event.name === Element.Text) {
           inText = false;
-        } else if (event.name === "si") {
+        } else if (event.name === Element.StringItem) {
           strings.push(current ?? "");
           current = null;
         }

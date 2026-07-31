@@ -1,6 +1,19 @@
 import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
 import type { Cell, Row } from "./cell";
+import { interpretCell } from "./interpret-cell";
+
+const Element = {
+  Row: "row",
+  Cell: "c",
+  Value: "v",
+  Text: "t",
+} as const;
+
+const Attribute = {
+  Reference: "r",
+  Type: "t",
+} as const;
 
 export class Worksheet {
   constructor(
@@ -14,21 +27,21 @@ export class Worksheet {
     let rowNumber = 0;
     let cells: Cell[] = [];
     let cellRef = "";
-    let cellType = "";
+    let cellTypeCode = "";
     let valueText: string | null = null;
     let capturing = false;
 
     for await (const event of this.xml.read(this.archive.openStream(this.path))) {
       switch (event.type) {
         case "open":
-          if (event.name === "row") {
-            rowNumber = Number(event.attributes["r"] ?? "0");
+          if (event.name === Element.Row) {
+            rowNumber = Number(event.attributes[Attribute.Reference] ?? "0");
             cells = [];
-          } else if (event.name === "c") {
-            cellRef = event.attributes["r"] ?? "";
-            cellType = event.attributes["t"] ?? "";
+          } else if (event.name === Element.Cell) {
+            cellRef = event.attributes[Attribute.Reference] ?? "";
+            cellTypeCode = event.attributes[Attribute.Type] ?? "";
             valueText = null;
-          } else if (event.name === "v" || event.name === "t") {
+          } else if (event.name === Element.Value || event.name === Element.Text) {
             capturing = true;
             valueText ??= "";
           }
@@ -39,40 +52,17 @@ export class Worksheet {
           }
           break;
         case "close":
-          if (event.name === "v" || event.name === "t") {
+          if (event.name === Element.Value || event.name === Element.Text) {
             capturing = false;
-          } else if (event.name === "c") {
-            const cell = this.toCell(cellRef, cellType, valueText);
-            if (cell !== null) {
-              cells.push(cell);
+          } else if (event.name === Element.Cell) {
+            if (valueText !== null) {
+              cells.push(interpretCell(cellRef, cellTypeCode, valueText, this.sharedStrings));
             }
-          } else if (event.name === "row") {
+          } else if (event.name === Element.Row) {
             yield { number: rowNumber, cells };
           }
           break;
       }
-    }
-  }
-
-  private toCell(ref: string, type: string, valueText: string | null): Cell | null {
-    if (valueText === null) {
-      return null;
-    }
-    switch (type) {
-      case "":
-      case "n":
-        return { ref, type: "number", value: Number(valueText) };
-      case "s":
-        return { ref, type: "string", value: this.sharedStrings[Number(valueText)] ?? "" };
-      case "str":
-      case "inlineStr":
-        return { ref, type: "string", value: valueText };
-      case "b":
-        return { ref, type: "boolean", value: valueText !== "0" };
-      case "e":
-        return { ref, type: "error", value: valueText };
-      default:
-        throw new Error(`Unsupported cell type "${type}" at ${ref}`);
     }
   }
 }
