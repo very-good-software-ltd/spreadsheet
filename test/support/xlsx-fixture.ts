@@ -1,6 +1,13 @@
 import { strToU8, zipSync } from "fflate";
 
-type CellInput = number | string;
+type CellInput =
+  | number
+  | string
+  | { readonly boolean: boolean }
+  | { readonly error: string }
+  | { readonly inlineString: string }
+  | { readonly formulaString: string }
+  | { readonly date: string };
 
 export interface SheetInput {
   readonly name: string;
@@ -18,19 +25,35 @@ export function xlsx(sheets: readonly SheetInput[]): Uint8Array {
     return sharedStrings.length - 1;
   };
 
+  const cellXml = (ref: string, value: CellInput): string => {
+    if (typeof value === "number") {
+      return `<c r="${ref}"><v>${value}</v></c>`;
+    }
+    if (typeof value === "string") {
+      return `<c r="${ref}" t="s"><v>${indexOfString(value)}</v></c>`;
+    }
+    if ("boolean" in value) {
+      return `<c r="${ref}" t="b"><v>${value.boolean ? 1 : 0}</v></c>`;
+    }
+    if ("error" in value) {
+      return `<c r="${ref}" t="e"><v>${value.error}</v></c>`;
+    }
+    if ("inlineString" in value) {
+      return `<c r="${ref}" t="inlineStr"><is><t>${value.inlineString}</t></is></c>`;
+    }
+    if ("formulaString" in value) {
+      return `<c r="${ref}" t="str"><v>${value.formulaString}</v></c>`;
+    }
+    return `<c r="${ref}" t="d"><v>${value.date}</v></c>`;
+  };
+
   const files: Record<string, Uint8Array> = {};
 
   sheets.forEach((sheet, sheetIndex) => {
     const rowsXml = sheet.rows
       .map((cells, rowIndex) => {
         const cellsXml = cells
-          .map((value, columnIndex) => {
-            const ref = `${columnLetter(columnIndex)}${rowIndex + 1}`;
-            if (typeof value === "number") {
-              return `<c r="${ref}"><v>${value}</v></c>`;
-            }
-            return `<c r="${ref}" t="s"><v>${indexOfString(value)}</v></c>`;
-          })
+          .map((value, columnIndex) => cellXml(`${columnLetter(columnIndex)}${rowIndex + 1}`, value))
           .join("");
         return `<row r="${rowIndex + 1}">${cellsXml}</row>`;
       })

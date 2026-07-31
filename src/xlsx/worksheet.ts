@@ -16,7 +16,7 @@ export class Worksheet {
     let cellRef = "";
     let cellType = "";
     let valueText: string | null = null;
-    let inValue = false;
+    let capturing = false;
 
     for await (const event of this.xml.read(this.archive.openStream(this.path))) {
       switch (event.type) {
@@ -28,19 +28,19 @@ export class Worksheet {
             cellRef = event.attributes["r"] ?? "";
             cellType = event.attributes["t"] ?? "";
             valueText = null;
-          } else if (event.name === "v") {
-            inValue = true;
-            valueText = "";
+          } else if (event.name === "v" || event.name === "t") {
+            capturing = true;
+            valueText ??= "";
           }
           break;
         case "text":
-          if (inValue && valueText !== null) {
+          if (capturing && valueText !== null) {
             valueText += event.text;
           }
           break;
         case "close":
-          if (event.name === "v") {
-            inValue = false;
+          if (event.name === "v" || event.name === "t") {
+            capturing = false;
           } else if (event.name === "c") {
             const cell = this.toCell(cellRef, cellType, valueText);
             if (cell !== null) {
@@ -58,13 +58,21 @@ export class Worksheet {
     if (valueText === null) {
       return null;
     }
-    if (type === "s") {
-      const index = Number(valueText);
-      return { ref, type: "string", value: this.sharedStrings[index] ?? "" };
+    switch (type) {
+      case "":
+      case "n":
+        return { ref, type: "number", value: Number(valueText) };
+      case "s":
+        return { ref, type: "string", value: this.sharedStrings[Number(valueText)] ?? "" };
+      case "str":
+      case "inlineStr":
+        return { ref, type: "string", value: valueText };
+      case "b":
+        return { ref, type: "boolean", value: valueText !== "0" };
+      case "e":
+        return { ref, type: "error", value: valueText };
+      default:
+        throw new Error(`Unsupported cell type "${type}" at ${ref}`);
     }
-    if (type === "" || type === "n") {
-      return { ref, type: "number", value: Number(valueText) };
-    }
-    return null;
   }
 }
