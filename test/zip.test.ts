@@ -1,46 +1,134 @@
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { FflateZipArchive } from "../src/zip/fflate-zip-archive";
+import { NativeZipArchive } from "../src/zip/native-zip-archive";
 
-describe("FflateZipArchive", () => {
-  it("lists entries with their paths and sizes", () => {
-    const bytes = zipSync({
+// fflate writes the archives and our native reader reads them back, so a mature
+// implementation produces the input rather than a hand-authored one.
+
+function eocdOffset(bytes: Uint8Array): number {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let pos = bytes.length - 22; pos >= 0; pos--) {
+    if (view.getUint32(pos, true) === 0x0605_4b50) {
+      return pos;
+    }
+  }
+  throw new Error("fixture has no end of central directory");
+}
+
+function centralDirectoryOffset(bytes: Uint8Array): number {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  return view.getUint32(eocdOffset(bytes) + 16, true);
+}
+
+async function collectChunks(stream: ReadableStream<Uint8Array>): Promise<Uint8Array[]> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    chunks.push(value);
+  }
+  return chunks;
+}
+
+function concat(chunks: readonly Uint8Array[]): Uint8Array {
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const result = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
+}
+
+describe("NativeZipArchive", () => {
+  it("reads every entry back to the bytes fflate compressed", async () => {
+    const files = {
       "a.txt": strToU8("hello"),
-      "xl/worksheets/sheet1.xml": strToU8("<worksheet/>"),
-    });
-
-    const archive = new FflateZipArchive(bytes);
+      "empty.bin": new Uint8Array(0),
+      "nested/deep/path.xml": strToU8("<r/>"),
+      "unïcode-nàme.xml": strToU8("<x/>"),
+      "xl/worksheets/sheet1.xml": strToU8(`<worksheet>${"data ".repeat(3000)}</worksheet>`),
+    };
+    const archive = new NativeZipArchive(zipSync(files));
 
     expect(
       archive
         .entries()
         .map((entry) => entry.path)
         .sort(),
-    ).toEqual(["a.txt", "xl/worksheets/sheet1.xml"]);
-    expect(archive.has("a.txt")).toBe(true);
-    expect(archive.has("missing")).toBe(false);
+    ).toEqual(Object.keys(files).sort());
+    for (const [path, expected] of Object.entries(files)) {
+      expect(archive.has(path)).toBe(true);
+      expect(await archive.read(path)).toEqual(expected);
+    }
   });
 
-  it("reads an entry as decompressed bytes", async () => {
-    const bytes = zipSync({ "a.txt": strToU8("hello") });
+  it("reads stored (uncompressed) entries", async () => {
+    const files = { "a.txt": strToU8("hello"), "b.bin": strToU8("x".repeat(1000)) };
+    const archive = new NativeZipArchive(zipSync(files, { level: 0 }));
 
-    const data = await new FflateZipArchive(bytes).read("a.txt");
-
-    expect(new TextDecoder().decode(data)).toBe("hello");
+    for (const [path, expected] of Object.entries(files)) {
+      expect(await archive.read(path)).toEqual(expected);
+    }
   });
 
-  it("opens an entry as a stream", async () => {
-    const bytes = zipSync({ "a.txt": strToU8("hello") });
+  it("streams a large entry in multiple chunks", async () => {
+    const original = strToU8("lorem ipsum ".repeat(100_000));
+    const archive = new NativeZipArchive(zipSync({ "big.xml": original }));
 
-    const stream = new FflateZipArchive(bytes).openStream("a.txt");
-    const collected = await new Response(stream).text();
+    const chunks = await collectChunks(archive.openStream("big.xml"));
 
-    expect(collected).toBe("hello");
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(concat(chunks)).toEqual(original);
   });
 
   it("throws for a missing entry", () => {
-    const archive = new FflateZipArchive(zipSync({ "a.txt": strToU8("hello") }));
+    const archive = new NativeZipArchive(zipSync({ "a.txt": strToU8("hi") }));
 
     expect(() => archive.openStream("missing")).toThrow("Zip entry not found: missing");
+  });
+
+  it("reads an archive that has a trailing comment", async () => {
+    const base = zipSync({ "a.txt": strToU8("hello") });
+    const comment = strToU8("a trailing comment");
+    const bytes = new Uint8Array(base.length + comment.length);
+    bytes.set(base);
+    bytes.set(comment, base.length);
+    new DataView(bytes.buffer).setUint16(eocdOffset(base) + 20, comment.length, true);
+
+    const archive = new NativeZipArchive(bytes);
+
+    expect(await archive.read("a.txt")).toEqual(strToU8("hello"));
+  });
+
+  it("throws on an unsupported compression method", () => {
+    const bytes = zipSync({ "a.txt": strToU8("hello ".repeat(100)) });
+    new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint16(
+      centralDirectoryOffset(bytes) + 10,
+      99,
+      true,
+    );
+    const archive = new NativeZipArchive(bytes);
+
+    expect(() => archive.openStream("a.txt")).toThrow("Unsupported compression method 99");
+  });
+
+  it("rejects zip64 archives", () => {
+    const bytes = zipSync({ "a.txt": strToU8("hello") });
+    new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint32(
+      centralDirectoryOffset(bytes) + 20,
+      0xffff_ffff,
+      true,
+    );
+
+    expect(() => new NativeZipArchive(bytes)).toThrow("Zip64 archives are not supported");
+  });
+
+  it("rejects a buffer too short to be a zip", () => {
+    expect(() => new NativeZipArchive(new Uint8Array([1, 2, 3]))).toThrow("Malformed zip");
   });
 });

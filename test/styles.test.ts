@@ -2,11 +2,11 @@ import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { readStyles } from "../src/xlsx/read-styles";
 import { SaxesXmlReader } from "../src/xml/saxes-xml-reader";
-import { FflateZipArchive } from "../src/zip/fflate-zip-archive";
+import { NativeZipArchive } from "../src/zip/native-zip-archive";
 
 async function stylesFrom(styleSheet: string) {
   const bytes = zipSync({ "xl/styles.xml": strToU8(styleSheet) });
-  return readStyles(new FflateZipArchive(bytes), new SaxesXmlReader());
+  return readStyles(new NativeZipArchive(bytes), new SaxesXmlReader());
 }
 
 describe("readStyles", () => {
