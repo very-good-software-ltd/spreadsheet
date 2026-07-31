@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Row } from "../src/xlsx/cell";
+import type { Row } from "../src/xlsx/row";
 import { Workbook } from "../src/xlsx/workbook";
 import { type SheetInput, xlsx } from "./support/xlsx-fixture";
 
@@ -26,15 +26,15 @@ describe("Worksheet rows", () => {
       {
         number: 1,
         cells: [
-          { ref: "A1", type: "number", value: 1 },
-          { ref: "B1", type: "string", value: "Hello" },
+          { ref: "A1", columnIndex: 0, type: "number", value: 1 },
+          { ref: "B1", columnIndex: 1, type: "string", value: "Hello" },
         ],
       },
       {
         number: 2,
         cells: [
-          { ref: "A2", type: "string", value: "World" },
-          { ref: "B2", type: "number", value: 2.5 },
+          { ref: "A2", columnIndex: 0, type: "string", value: "World" },
+          { ref: "B2", columnIndex: 1, type: "number", value: 2.5 },
         ],
       },
     ]);
@@ -55,11 +55,11 @@ describe("Worksheet rows", () => {
     });
 
     expect(row?.cells).toEqual([
-      { ref: "A1", type: "boolean", value: true },
-      { ref: "B1", type: "boolean", value: false },
-      { ref: "C1", type: "error", value: "#DIV/0!" },
-      { ref: "D1", type: "string", value: "inline" },
-      { ref: "E1", type: "string", value: "formula" },
+      { ref: "A1", columnIndex: 0, type: "boolean", value: true },
+      { ref: "B1", columnIndex: 1, type: "boolean", value: false },
+      { ref: "C1", columnIndex: 2, type: "error", value: "#DIV/0!" },
+      { ref: "D1", columnIndex: 3, type: "string", value: "inline" },
+      { ref: "E1", columnIndex: 4, type: "string", value: "formula" },
     ]);
   });
 
@@ -68,7 +68,7 @@ describe("Worksheet rows", () => {
 
     const [row] = await rowsOf({ name: "Data", rows: [[date]] });
 
-    expect(row?.cells).toEqual([{ ref: "A1", type: "date", value: date }]);
+    expect(row?.cells).toEqual([{ ref: "A1", columnIndex: 0, type: "date", value: date }]);
   });
 
   it("reads dates under the 1904 date system", async () => {
@@ -80,7 +80,7 @@ describe("Worksheet rows", () => {
       rows.push(row);
     }
 
-    expect(rows[0]?.cells).toEqual([{ ref: "A1", type: "date", value: date }]);
+    expect(rows[0]?.cells).toEqual([{ ref: "A1", columnIndex: 0, type: "date", value: date }]);
   });
 
   it("throws on an unsupported cell type", async () => {

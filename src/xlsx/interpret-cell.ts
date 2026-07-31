@@ -1,4 +1,4 @@
-import type { Cell } from "./cell";
+import type { CellValue } from "./cell";
 import { serialToDate } from "./date";
 import type { Styles } from "./read-styles";
 
@@ -18,31 +18,31 @@ export interface CellContext {
   readonly date1904: boolean;
 }
 
-export function interpretCell(
+export function interpretCellValue(
   ref: string,
   typeCode: string,
   styleIndex: number | undefined,
   text: string,
   context: CellContext,
-): Cell {
+): CellValue {
   // An absent t attribute means a number cell.
   const code = typeCode === "" ? CellTypeCode.Number : typeCode;
 
   switch (code) {
     case CellTypeCode.Number:
       if (styleIndex !== undefined && context.styles.isDateStyle(styleIndex)) {
-        return { ref, type: "date", value: serialToDate(Number(text), context.date1904) };
+        return { type: "date", value: serialToDate(Number(text), context.date1904) };
       }
-      return { ref, type: "number", value: Number(text) };
+      return { type: "number", value: Number(text) };
     case CellTypeCode.SharedString:
-      return { ref, type: "string", value: context.sharedStrings[Number(text)] ?? "" };
+      return { type: "string", value: context.sharedStrings[Number(text)] ?? "" };
     case CellTypeCode.FormulaString:
     case CellTypeCode.InlineString:
-      return { ref, type: "string", value: text };
+      return { type: "string", value: text };
     case CellTypeCode.Boolean:
-      return { ref, type: "boolean", value: text !== "0" };
+      return { type: "boolean", value: text !== "0" };
     case CellTypeCode.Error:
-      return { ref, type: "error", value: text };
+      return { type: "error", value: text };
     default:
       throw new Error(`Unsupported cell type "${typeCode}" at ${ref}`);
   }

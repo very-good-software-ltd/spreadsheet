@@ -1,6 +1,6 @@
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
-import type { Row } from "../src/xlsx/cell";
+import type { Row } from "../src/xlsx/row";
 import { Workbook } from "../src/xlsx/workbook";
 
 // exceljs writes the file and we read it back, so a separate implementation
@@ -29,15 +29,15 @@ describe("reading exceljs-written workbooks", () => {
       {
         number: 1,
         cells: [
-          { ref: "A1", type: "string", value: "SKU" },
-          { ref: "B1", type: "string", value: "Weight" },
+          { ref: "A1", columnIndex: 0, type: "string", value: "SKU" },
+          { ref: "B1", columnIndex: 1, type: "string", value: "Weight" },
         ],
       },
       {
         number: 2,
         cells: [
-          { ref: "A2", type: "string", value: "PROD-001" },
-          { ref: "B2", type: "number", value: 150 },
+          { ref: "A2", columnIndex: 0, type: "string", value: "PROD-001" },
+          { ref: "B2", columnIndex: 1, type: "number", value: 150 },
         ],
       },
     ]);
@@ -49,9 +49,22 @@ describe("reading exceljs-written workbooks", () => {
     }, "Data");
 
     expect(rows[0]?.cells).toEqual([
-      { ref: "A1", type: "boolean", value: true },
-      { ref: "B1", type: "boolean", value: false },
+      { ref: "A1", columnIndex: 0, type: "boolean", value: true },
+      { ref: "B1", columnIndex: 1, type: "boolean", value: false },
     ]);
+  });
+
+  it("looks a cell up by column, returning undefined for a gap", async () => {
+    const rows = await readWith((workbook) => {
+      const sheet = workbook.addWorksheet("Data");
+      sheet.getCell("A1").value = "left";
+      sheet.getCell("C1").value = "right";
+    }, "Data");
+    const row = rows[0];
+
+    expect(row?.cell(0)).toEqual({ ref: "A1", columnIndex: 0, type: "string", value: "left" });
+    expect(row?.cell(2)).toEqual({ ref: "C1", columnIndex: 2, type: "string", value: "right" });
+    expect(row?.cell(1)).toBeUndefined();
   });
 
   it("reads a date cell written with a date number format", async () => {
@@ -63,7 +76,7 @@ describe("reading exceljs-written workbooks", () => {
       cell.numFmt = "yyyy-mm-dd";
     }, "Data");
 
-    expect(rows[0]?.cells).toEqual([{ ref: "A1", type: "date", value: date }]);
+    expect(rows[0]?.cells).toEqual([{ ref: "A1", columnIndex: 0, type: "date", value: date }]);
   });
 
   it("reads a formula cell as its cached result", async () => {
@@ -71,7 +84,7 @@ describe("reading exceljs-written workbooks", () => {
       workbook.addWorksheet("Data").getCell("A1").value = { formula: "2*5", result: 10 };
     }, "Data");
 
-    expect(rows[0]?.cells).toEqual([{ ref: "A1", type: "number", value: 10 }]);
+    expect(rows[0]?.cells).toEqual([{ ref: "A1", columnIndex: 0, type: "number", value: 10 }]);
   });
 
   it("reports a hidden sheet as hidden", async () => {

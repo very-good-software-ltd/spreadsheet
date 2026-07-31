@@ -1,7 +1,8 @@
 import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
-import type { Cell, Row } from "./cell";
-import { type CellContext, interpretCell } from "./interpret-cell";
+import type { Cell } from "./cell";
+import { type CellContext, interpretCellValue } from "./interpret-cell";
+import { Row } from "./row";
 
 const Element = {
   Row: "row",
@@ -59,10 +60,11 @@ export class Worksheet {
             capturing = false;
           } else if (event.name === Element.Cell) {
             if (valueText !== null) {
-              cells.push(interpretCell(cellRef, cellTypeCode, cellStyleIndex, valueText, this.context));
+              const value = interpretCellValue(cellRef, cellTypeCode, cellStyleIndex, valueText, this.context);
+              cells.push({ ref: cellRef, columnIndex: columnIndexOf(cellRef), ...value });
             }
           } else if (event.name === Element.Row) {
-            yield { number: rowNumber, cells };
+            yield new Row(rowNumber, cells);
           }
           break;
       }
@@ -72,4 +74,18 @@ export class Worksheet {
 
 function styleIndexOf(attribute: string | undefined): number | undefined {
   return attribute === undefined ? undefined : Number(attribute);
+}
+
+// A cell reference like "C1" starts with the column letters. Convert them from
+// base-26 (A=1) to a zero-based index, so "A" is 0 and "AA" is 26.
+function columnIndexOf(ref: string): number {
+  let index = 0;
+  for (const char of ref) {
+    const code = char.charCodeAt(0);
+    if (code < 65 || code > 90) {
+      break;
+    }
+    index = index * 26 + (code - 64);
+  }
+  return index - 1;
 }

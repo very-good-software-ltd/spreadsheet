@@ -5,9 +5,4 @@ export type CellValue =
   | { readonly type: "error"; readonly value: string }
   | { readonly type: "date"; readonly value: Date };
 
-export type Cell = { readonly ref: string } & CellValue;
-
-export interface Row {
-  readonly number: number;
-  readonly cells: readonly Cell[];
-}
+export type Cell = { readonly ref: string; readonly columnIndex: number } & CellValue;
