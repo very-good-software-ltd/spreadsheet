@@ -24,6 +24,7 @@
     "dist"
   ],
   "scripts": {
+    "benchmark": "npm run build && node benchmark/run.mjs",
     "build": "vite build",
     "lint": "biome check --error-on-warnings",
     "lint:fix": "biome check --write",
