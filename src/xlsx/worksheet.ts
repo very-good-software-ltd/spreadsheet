@@ -1,7 +1,7 @@
 import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
 import type { Cell, Row } from "./cell";
-import { interpretCell } from "./interpret-cell";
+import { type CellContext, interpretCell } from "./interpret-cell";
 
 const Element = {
   Row: "row",
@@ -13,6 +13,7 @@ const Element = {
 const Attribute = {
   Reference: "r",
   Type: "t",
+  Style: "s",
 } as const;
 
 export class Worksheet {
@@ -20,7 +21,7 @@ export class Worksheet {
     private readonly archive: ZipArchive,
     private readonly xml: XmlReader,
     private readonly path: string,
-    private readonly sharedStrings: readonly string[],
+    private readonly context: CellContext,
   ) {}
 
   async *rows(): AsyncIterable<Row> {
@@ -28,6 +29,7 @@ export class Worksheet {
     let cells: Cell[] = [];
     let cellRef = "";
     let cellTypeCode = "";
+    let cellStyleIndex: number | undefined;
     let valueText: string | null = null;
     let capturing = false;
 
@@ -40,6 +42,7 @@ export class Worksheet {
           } else if (event.name === Element.Cell) {
             cellRef = event.attributes[Attribute.Reference] ?? "";
             cellTypeCode = event.attributes[Attribute.Type] ?? "";
+            cellStyleIndex = styleIndexOf(event.attributes[Attribute.Style]);
             valueText = null;
           } else if (event.name === Element.Value || event.name === Element.Text) {
             capturing = true;
@@ -56,7 +59,7 @@ export class Worksheet {
             capturing = false;
           } else if (event.name === Element.Cell) {
             if (valueText !== null) {
-              cells.push(interpretCell(cellRef, cellTypeCode, valueText, this.sharedStrings));
+              cells.push(interpretCell(cellRef, cellTypeCode, cellStyleIndex, valueText, this.context));
             }
           } else if (event.name === Element.Row) {
             yield { number: rowNumber, cells };
@@ -65,4 +68,8 @@ export class Worksheet {
       }
     }
   }
+}
+
+function styleIndexOf(attribute: string | undefined): number | undefined {
+  return attribute === undefined ? undefined : Number(attribute);
 }

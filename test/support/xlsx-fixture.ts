@@ -3,18 +3,28 @@ import { strToU8, zipSync } from "fflate";
 type CellInput =
   | number
   | string
+  | Date
   | { readonly boolean: boolean }
   | { readonly error: string }
   | { readonly inlineString: string }
   | { readonly formulaString: string }
-  | { readonly date: string };
+  | { readonly rawType: string };
 
 export interface SheetInput {
   readonly name: string;
   readonly rows: readonly (readonly CellInput[])[];
 }
 
-export function xlsx(sheets: readonly SheetInput[]): Uint8Array {
+export interface WorkbookOptions {
+  readonly date1904?: boolean;
+}
+
+const DAY_MS = 86_400_000;
+const DATE_STYLE_INDEX = 1;
+
+export function xlsx(sheets: readonly SheetInput[], options: WorkbookOptions = {}): Uint8Array {
+  const date1904 = options.date1904 ?? false;
+
   const sharedStrings: string[] = [];
   const indexOfString = (text: string): number => {
     const existing = sharedStrings.indexOf(text);
@@ -32,6 +42,9 @@ export function xlsx(sheets: readonly SheetInput[]): Uint8Array {
     if (typeof value === "string") {
       return `<c r="${ref}" t="s"><v>${indexOfString(value)}</v></c>`;
     }
+    if (value instanceof Date) {
+      return `<c r="${ref}" s="${DATE_STYLE_INDEX}"><v>${dateToSerial(value, date1904)}</v></c>`;
+    }
     if ("boolean" in value) {
       return `<c r="${ref}" t="b"><v>${value.boolean ? 1 : 0}</v></c>`;
     }
@@ -44,7 +57,7 @@ export function xlsx(sheets: readonly SheetInput[]): Uint8Array {
     if ("formulaString" in value) {
       return `<c r="${ref}" t="str"><v>${value.formulaString}</v></c>`;
     }
-    return `<c r="${ref}" t="d"><v>${value.date}</v></c>`;
+    return `<c r="${ref}" t="${value.rawType}"><v>0</v></c>`;
   };
 
   const files: Record<string, Uint8Array> = {};
@@ -67,8 +80,9 @@ export function xlsx(sheets: readonly SheetInput[]): Uint8Array {
   const sheetElements = sheets
     .map((sheet, i) => `<sheet name="${sheet.name}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
     .join("");
+  const workbookProperties = date1904 ? '<workbookPr date1904="1"/>' : "";
   files["xl/workbook.xml"] = strToU8(
-    `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetElements}</sheets></workbook>`,
+    `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${workbookProperties}<sheets>${sheetElements}</sheets></workbook>`,
   );
 
   const relElements = sheets
@@ -86,7 +100,17 @@ export function xlsx(sheets: readonly SheetInput[]): Uint8Array {
     `<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">${siElements}</sst>`,
   );
 
+  // cellXfs index 1 uses built-in number format 14 (a date), which is what date cells reference.
+  files["xl/styles.xml"] = strToU8(
+    `<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="14"/></cellXfs></styleSheet>`,
+  );
+
   return zipSync(files);
+}
+
+function dateToSerial(date: Date, date1904: boolean): number {
+  const base = date1904 ? Date.UTC(1904, 0, 1) : Date.UTC(1899, 11, 30);
+  return (date.getTime() - base) / DAY_MS;
 }
 
 function columnLetter(index: number): string {

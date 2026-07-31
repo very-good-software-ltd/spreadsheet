@@ -63,8 +63,28 @@ describe("Worksheet rows", () => {
     ]);
   });
 
+  it("reads a styled number as a date", async () => {
+    const date = new Date(Date.UTC(2020, 0, 15));
+
+    const [row] = await rowsOf({ name: "Data", rows: [[date]] });
+
+    expect(row?.cells).toEqual([{ ref: "A1", type: "date", value: date }]);
+  });
+
+  it("reads dates under the 1904 date system", async () => {
+    const date = new Date(Date.UTC(2020, 0, 15));
+    const workbook = await Workbook.open(xlsx([{ name: "Data", rows: [[date]] }], { date1904: true }));
+
+    const rows: Row[] = [];
+    for await (const row of workbook.worksheet("Data").rows()) {
+      rows.push(row);
+    }
+
+    expect(rows[0]?.cells).toEqual([{ ref: "A1", type: "date", value: date }]);
+  });
+
   it("throws on an unsupported cell type", async () => {
-    await expect(rowsOf({ name: "Data", rows: [[{ date: "2020-01-01" }]] })).rejects.toThrow(
+    await expect(rowsOf({ name: "Data", rows: [[{ rawType: "d" }]] })).rejects.toThrow(
       'Unsupported cell type "d" at A1',
     );
   });

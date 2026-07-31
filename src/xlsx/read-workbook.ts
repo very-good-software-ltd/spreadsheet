@@ -5,10 +5,12 @@ import { readWorkbookRelationships } from "./read-relationships";
 const WORKBOOK_PART = "xl/workbook.xml";
 
 const Element = {
+  Properties: "workbookPr",
   Sheet: "sheet",
 } as const;
 
 const Attribute = {
+  Date1904: "date1904",
   Name: "name",
   RelationshipId: "r:id",
 } as const;
@@ -18,21 +20,33 @@ export interface WorksheetRef {
   readonly path: string;
 }
 
-export async function readWorksheetRefs(archive: ZipArchive, xml: XmlReader): Promise<WorksheetRef[]> {
+export interface WorkbookInfo {
+  readonly worksheets: readonly WorksheetRef[];
+  readonly date1904: boolean;
+}
+
+export async function readWorkbook(archive: ZipArchive, xml: XmlReader): Promise<WorkbookInfo> {
   const relationships = await readWorkbookRelationships(archive, xml);
-  const refs: WorksheetRef[] = [];
+  const worksheets: WorksheetRef[] = [];
+  let date1904 = false;
 
   for await (const event of xml.read(archive.openStream(WORKBOOK_PART))) {
-    if (event.type === "open" && event.name === Element.Sheet) {
+    if (event.type !== "open") {
+      continue;
+    }
+    if (event.name === Element.Properties) {
+      const flag = event.attributes[Attribute.Date1904];
+      date1904 = flag === "1" || flag === "true";
+    } else if (event.name === Element.Sheet) {
       const name = event.attributes[Attribute.Name];
-      const relId = event.attributes[Attribute.RelationshipId];
       if (name === undefined) {
         continue;
       }
+      const relId = event.attributes[Attribute.RelationshipId];
       const path = relId === undefined ? undefined : relationships.get(relId);
-      refs.push({ name, path: path ?? "" });
+      worksheets.push({ name, path: path ?? "" });
     }
   }
 
-  return refs;
+  return { worksheets, date1904 };
 }
