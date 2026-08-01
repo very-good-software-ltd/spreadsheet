@@ -1,0 +1,84 @@
+{
+  "$schema": "node_modules/@biomejs/biome/configuration_schema.json",
+  "vcs": {
+    "enabled": false,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "ignoreUnknown": false,
+    "includes": [
+      "app/**/*.ts*",
+      "app/**/*.css",
+      "server/**/*.ts*",
+      "tests/**/*.ts*",
+      "*.{ts,tsx,js,jsx}",
+      "*.{json,jsonc}",
+      // When create-react-router scaffolds a project it rewrites package.json and drops the trailing
+      // newline that Biome's formatter requires, so a brand new project would fail lint straight away.
+      // Excluding package*.json keeps a fresh scaffold clean and leaves the generated lockfile alone too.
+      // To lint package.json too, narrow this to "!package-lock.json" and run `npm run lint:fix` once.
+      "!package*.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineEnding": "auto",
+    "lineWidth": 120
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "suspicious": {
+        "noConsole": { "level": "error", "options": { "allow": ["error", "warn"] } }
+      }
+    },
+    "domains": {
+      "react": "recommended",
+      "test": "recommended"
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["app/routes/**/*.tsx"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useHookAtTopLevel": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["server.js"],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noConsole": "off"
+          }
+        }
+      }
+    }
+  ],
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
+}
