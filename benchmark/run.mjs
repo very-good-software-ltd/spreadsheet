@@ -9,7 +9,15 @@ import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const FILES_DIR = "benchmark/files";
-const LIBRARIES = ["very-good-spreadsheet", "exceljs", "xlsx"];
+// Each library in every mode it supports. stream is the bounded-memory path;
+// load materializes everything. SheetJS has no streaming read.
+const RUNS = [
+  ["very-good-spreadsheet", "stream"],
+  ["very-good-spreadsheet", "load"],
+  ["exceljs", "stream"],
+  ["exceljs", "load"],
+  ["xlsx", "load"],
+];
 const worker = fileURLToPath(new URL("./read-file.mjs", import.meta.url));
 
 const args = process.argv.slice(2);
@@ -33,8 +41,8 @@ if (targets.length === 0) {
   process.exit(0);
 }
 
-function run(library, file) {
-  const nodeArgs = [...(cap ? [`--max-old-space-size=${cap}`] : []), worker, library, file];
+function run(library, mode, file) {
+  const nodeArgs = [...(cap ? [`--max-old-space-size=${cap}`] : []), worker, library, mode, file];
   const result = spawnSync(process.execPath, nodeArgs, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
   if (result.status === 0) {
     return { ok: true, ...JSON.parse(result.stdout.trim().split("\n").at(-1)) };
@@ -53,15 +61,18 @@ function padStart(value, width) {
 
 for (const file of targets) {
   console.log(`\n${file}${cap ? `  (heap cap ${cap}MB)` : ""}`);
-  console.log(`  ${pad("library", 24)} ${padStart("cells", 10)} ${padStart("time", 9)} ${padStart("peak RSS", 10)}`);
-  for (const library of LIBRARIES) {
-    const outcome = run(library, file);
+  console.log(
+    `  ${pad("library", 24)} ${pad("mode", 7)} ${padStart("cells", 10)} ${padStart("time", 9)} ${padStart("peak RSS", 10)}`,
+  );
+  for (const [library, mode] of RUNS) {
+    const outcome = run(library, mode, file);
+    const label = `  ${pad(library, 24)} ${pad(mode, 7)}`;
     if (outcome.ok) {
       console.log(
-        `  ${pad(library, 24)} ${padStart(outcome.cells, 10)} ${padStart(`${(outcome.ms / 1000).toFixed(1)}s`, 9)} ${padStart(`${outcome.rssMb.toFixed(0)}MB`, 10)}`,
+        `${label} ${padStart(outcome.cells, 10)} ${padStart(`${(outcome.ms / 1000).toFixed(1)}s`, 9)} ${padStart(`${outcome.rssMb.toFixed(0)}MB`, 10)}`,
       );
     } else {
-      console.log(`  ${pad(library, 24)} ${padStart(outcome.status, 32)}`);
+      console.log(`${label} ${padStart(outcome.status, 31)}`);
     }
   }
 }
