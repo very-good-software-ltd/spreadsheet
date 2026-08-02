@@ -18,13 +18,15 @@
   "dependencies": {
     "@react-router/express": "^8.3.0",
     "@react-router/node": "^8.3.0",
+    "@tanstack/react-virtual": "^3.14.9",
     "compression": "^1.8.1",
     "express": "^5.2.1",
     "isbot": "^5.2.1",
     "morgan": "^1.11.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router": "^8.3.0"
+    "react-router": "^8.3.0",
+    "very-good-spreadsheet": "file:.."
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",

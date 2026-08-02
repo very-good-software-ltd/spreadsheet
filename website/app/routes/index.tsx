@@ -1,9 +1,12 @@
-import { IndexPage } from "~/pages";
+import { ViewerPage } from "~/pages/viewer";
 
 export function meta() {
-  return [{ title: "New React Router App" }, { name: "description", content: "Welcome to React Router!" }];
+  return [
+    { title: "very-good-spreadsheet" },
+    { name: "description", content: "Stream a large .xlsx into a virtualized table, in the browser." },
+  ];
 }
 
 export default function IndexRoute() {
-  return <IndexPage />;
+  return <ViewerPage />;
 }
