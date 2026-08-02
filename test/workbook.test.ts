@@ -1,3 +1,4 @@
+import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { Workbook } from "../src/xlsx/workbook";
 import { xlsx } from "./support/xlsx-fixture";
@@ -26,5 +27,47 @@ describe("Workbook", () => {
       { name: "Visible", hidden: false },
       { name: "Hidden", hidden: true },
     ]);
+  });
+
+  it("rejects bytes that are not a zip at all", async () => {
+    await expect(Workbook.open(new Uint8Array([1, 2, 3, 4, 5]))).rejects.toThrow(/not a valid xlsx/i);
+  });
+
+  it("rejects a zip that has no workbook part", async () => {
+    const bytes = zipSync({ "hello.txt": strToU8("hi") });
+
+    await expect(Workbook.open(bytes)).rejects.toThrow(/missing xl\/workbook\.xml/i);
+  });
+
+  it("names the worksheet when its data part is missing from the archive", async () => {
+    const workbook = `<workbook><sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+    const rels = `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`;
+    const bytes = zipSync({
+      "xl/workbook.xml": strToU8(workbook),
+      "xl/_rels/workbook.xml.rels": strToU8(rels),
+    });
+    const opened = await Workbook.open(bytes);
+
+    expect(() => opened.worksheet("Data")).toThrow(/Data/);
+  });
+
+  it("treats an out-of-range shared string as empty rather than crashing", async () => {
+    const workbook = `<workbook><sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+    const rels = `<Relationships><Relationship Id="rId1" Target="worksheets/sheet1.xml"/></Relationships>`;
+    const sheet = `<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>99</v></c></row></sheetData></worksheet>`;
+    const bytes = zipSync({
+      "xl/workbook.xml": strToU8(workbook),
+      "xl/_rels/workbook.xml.rels": strToU8(rels),
+      "xl/worksheets/sheet1.xml": strToU8(sheet),
+      "xl/sharedStrings.xml": strToU8(`<sst><si><t>only one</t></si></sst>`),
+    });
+    const opened = await Workbook.open(bytes);
+
+    const rows = [];
+    for await (const row of opened.worksheet("Data").rows()) {
+      rows.push(row);
+    }
+
+    expect(rows[0]?.cells).toEqual([{ ref: "A1", columnIndex: 0, type: "string", value: "" }]);
   });
 });

@@ -32,6 +32,10 @@ export interface WorkbookInfo {
 }
 
 export async function readWorkbook(archive: ZipArchive, xml: XmlReader): Promise<WorkbookInfo> {
+  if (!archive.has(WORKBOOK_PART)) {
+    throw new Error(`Not a valid xlsx file: missing ${WORKBOOK_PART}`);
+  }
+
   const relationships = await readWorkbookRelationships(archive, xml);
   const worksheets: WorksheetRef[] = [];
   let date1904 = false;

@@ -6,7 +6,9 @@
     "useIgnoreFile": true
   },
   "files": {
-    "ignoreUnknown": false
+    "ignoreUnknown": false,
+    // website has its own biome config
+    "includes": ["**", "!website"]
   },
   "formatter": {
     "enabled": true,

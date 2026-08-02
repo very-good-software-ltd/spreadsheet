@@ -16,7 +16,13 @@ export interface WorksheetInfo {
 
 export class Workbook {
   static async open(source: BinarySource): Promise<Workbook> {
-    const archive = openZip(await readAllBytes(source));
+    const bytes = await readAllBytes(source);
+    let archive: ZipArchive;
+    try {
+      archive = openZip(bytes);
+    } catch (cause) {
+      throw new Error("Not a valid xlsx file: could not read it as a zip", { cause });
+    }
     const xml = createXmlReader();
     const { worksheets, date1904 } = await readWorkbook(archive, xml);
     const sharedStrings = await readSharedStrings(archive, xml);
@@ -45,6 +51,9 @@ export class Workbook {
 
     if (ref === undefined) {
       throw new Error(`Worksheet not found: ${name}`);
+    }
+    if (!this.archive.has(ref.path)) {
+      throw new Error(`Worksheet "${name}" is missing its data part in the archive`);
     }
 
     return new Worksheet(this.archive, this.xml, ref.path, this.context);
