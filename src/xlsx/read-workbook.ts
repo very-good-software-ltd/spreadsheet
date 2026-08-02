@@ -1,5 +1,6 @@
 import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
+import { readPart } from "./read-part";
 import { readWorkbookRelationships } from "./read-relationships";
 
 const WORKBOOK_PART = "xl/workbook.xml";
@@ -40,7 +41,7 @@ export async function readWorkbook(archive: ZipArchive, xml: XmlReader): Promise
   const worksheets: WorksheetRef[] = [];
   let date1904 = false;
 
-  for await (const event of xml.read(archive.openStream(WORKBOOK_PART))) {
+  for await (const event of readPart(archive, xml, WORKBOOK_PART)) {
     if (event.type !== "open") {
       continue;
     }

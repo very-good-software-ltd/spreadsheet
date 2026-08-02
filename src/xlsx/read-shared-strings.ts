@@ -1,5 +1,6 @@
 import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
+import { readPart } from "./read-part";
 
 const SHARED_STRINGS_PART = "xl/sharedStrings.xml";
 
@@ -17,7 +18,7 @@ export async function readSharedStrings(archive: ZipArchive, xml: XmlReader): Pr
   let current: string | null = null;
   let inText = false;
 
-  for await (const event of xml.read(archive.openStream(SHARED_STRINGS_PART))) {
+  for await (const event of readPart(archive, xml, SHARED_STRINGS_PART)) {
     switch (event.type) {
       case "open":
         if (event.name === Element.StringItem) {

@@ -1,5 +1,6 @@
 import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
+import { readPart } from "./read-part";
 
 const STYLES_PART = "xl/styles.xml";
 
@@ -51,7 +52,7 @@ export async function readStyles(archive: ZipArchive, xml: XmlReader): Promise<S
 
   let inCellFormats = false;
 
-  for await (const event of xml.read(archive.openStream(STYLES_PART))) {
+  for await (const event of readPart(archive, xml, STYLES_PART)) {
     if (event.type === "open") {
       if (event.name === Element.CellFormats) {
         inCellFormats = true;

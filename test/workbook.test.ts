@@ -70,4 +70,10 @@ describe("Workbook", () => {
 
     expect(rows[0]?.cells).toEqual([{ ref: "A1", columnIndex: 0, type: "string", value: "" }]);
   });
+
+  it("names the part when its XML is malformed", async () => {
+    const bytes = zipSync({ "xl/workbook.xml": strToU8(`<workbook><sheets><sheet name="Data"`) });
+
+    await expect(Workbook.open(bytes)).rejects.toThrow(/xl\/workbook\.xml/);
+  });
 });

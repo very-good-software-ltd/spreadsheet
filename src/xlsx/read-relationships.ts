@@ -1,5 +1,6 @@
 import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
+import { readPart } from "./read-part";
 
 const RELATIONSHIPS_PART = "xl/_rels/workbook.xml.rels";
 
@@ -18,7 +19,7 @@ export async function readWorkbookRelationships(archive: ZipArchive, xml: XmlRea
     return targets;
   }
 
-  for await (const event of xml.read(archive.openStream(RELATIONSHIPS_PART))) {
+  for await (const event of readPart(archive, xml, RELATIONSHIPS_PART)) {
     if (event.type === "open" && event.name === Element.Relationship) {
       const id = event.attributes[Attribute.Id];
       const target = event.attributes[Attribute.Target];
