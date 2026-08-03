@@ -7,11 +7,9 @@ export class SaxesXmlReader implements XmlReader {
     const pending: XmlEvent[] = [];
 
     parser.on("opentag", (tag) => {
-      pending.push({
-        type: "open",
-        name: tag.name,
-        attributes: { ...tag.attributes },
-      });
+      // saxes builds a fresh attributes object per open tag and does not touch
+      // it afterward, so we hold the reference instead of copying it.
+      pending.push({ type: "open", name: tag.name, attributes: tag.attributes });
     });
     parser.on("text", (text) => {
       pending.push({ type: "text", text });
