@@ -1,12 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { ViewerPage } from "~/pages/viewer";
+import { Demo } from "~/pages/viewer";
 
-describe("ViewerPage", () => {
+describe("Demo", () => {
   it("prompts for a file before one is chosen", () => {
-    render(<ViewerPage />);
+    render(<Demo />);
 
-    expect(screen.getByText("Drop an .xlsx here, or choose a file above.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "GitHub" })).toBeInTheDocument();
+    expect(screen.getByText("Drop an .xlsx here or choose a file above.")).toBeInTheDocument();
   });
 });

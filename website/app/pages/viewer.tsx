@@ -9,11 +9,10 @@ const ROW_HEIGHT = 28;
 const COLUMN_WIDTH = 128;
 const ROW_NUMBER_WIDTH = 64;
 const FLUSH_EVERY = 5000;
-const REPO_URL = "https://github.com/christophgockel/very-good-spreadsheet";
 
 type Status = "idle" | "reading" | "done" | "error";
 
-export function ViewerPage() {
+export function Demo() {
   const workbookRef = useRef<Workbook | null>(null);
   const rowsRef = useRef<Row[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -109,8 +108,9 @@ export function ViewerPage() {
   const capped = displayedCount < streamedCount;
 
   return (
-    <main
-      className="mx-auto flex h-screen max-w-full flex-col gap-3 p-6"
+    // biome-ignore lint/a11y/noStaticElementInteractions: drag and drop is an enhancement, the file input is the accessible path.
+    <div
+      className="flex flex-col gap-3"
       onDragOver={(event) => {
         event.preventDefault();
         setDragging(true);
@@ -122,23 +122,8 @@ export function ViewerPage() {
         void handleFile(event.dataTransfer.files[0]);
       }}
     >
-      <header className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <h1 className="text-xl font-bold text-gray-800 dark:text-gray-100">very-good-spreadsheet</h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          Streams a large .xlsx into a virtualized table, entirely in your browser.
-        </p>
-        <a
-          href={REPO_URL}
-          className="text-sm text-blue-600 hover:underline dark:text-blue-400"
-          target="_blank"
-          rel="noreferrer"
-        >
-          GitHub
-        </a>
-      </header>
-
       <div className="flex flex-wrap items-center gap-4">
-        <label className="cursor-pointer rounded bg-gray-800 px-3 py-1.5 text-sm text-white dark:bg-gray-100 dark:text-gray-900">
+        <label className="cursor-pointer rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">
           Choose .xlsx
           <input
             type="file"
@@ -149,7 +134,7 @@ export function ViewerPage() {
         </label>
         {sheetNames.length > 1 && (
           <select
-            className="rounded border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
+            className="rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
             value={sheet}
             onChange={(event) => {
               setSheet(event.target.value);
@@ -171,7 +156,7 @@ export function ViewerPage() {
               {streamedCount.toLocaleString()} rows × {columnCount} cols
             </span>
             <span>{(elapsedMs / 1000).toFixed(1)}s</span>
-            {status === "reading" && <span className="text-blue-600 dark:text-blue-400">reading…</span>}
+            {status === "reading" && <span className="text-emerald-600 dark:text-emerald-400">reading…</span>}
             {capped && (
               <span className="text-amber-700 dark:text-amber-400">
                 showing first {displayedCount.toLocaleString()}
@@ -184,13 +169,15 @@ export function ViewerPage() {
 
       <div
         ref={scrollRef}
-        className={`flex-1 overflow-auto rounded border font-mono text-xs ${
-          dragging ? "border-blue-400 bg-blue-50/50 dark:bg-blue-950/30" : "border-gray-200 dark:border-gray-700"
+        className={`relative h-[70vh] overflow-auto rounded-lg border font-mono text-xs ${
+          dragging
+            ? "border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/30"
+            : "border-gray-200 dark:border-gray-700"
         }`}
       >
         {displayedCount === 0 ? (
           <div className="flex h-full items-center justify-center p-8 text-center font-sans text-sm text-gray-400">
-            {status === "reading" ? "Reading…" : "Drop an .xlsx here, or choose a file above."}
+            {status === "reading" ? "Reading…" : "Drop an .xlsx here or choose a file above."}
           </div>
         ) : (
           <div style={{ width: gridWidth }}>
@@ -264,6 +251,6 @@ export function ViewerPage() {
           </div>
         )}
       </div>
-    </main>
+    </div>
   );
 }

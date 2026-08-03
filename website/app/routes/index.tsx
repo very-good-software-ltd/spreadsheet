@@ -1,12 +1,15 @@
-import { ViewerPage } from "~/pages/viewer";
+import { LandingPage } from "~/pages/landing";
 
 export function meta() {
   return [
     { title: "very-good-spreadsheet" },
-    { name: "description", content: "Stream a large .xlsx into a virtualized table, in the browser." },
+    {
+      name: "description",
+      content: "Read Excel .xlsx files in Node and the browser, without loading the whole file into memory.",
+    },
   ];
 }
 
 export default function IndexRoute() {
-  return <ViewerPage />;
+  return <LandingPage />;
 }
