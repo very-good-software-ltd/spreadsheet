@@ -29,15 +29,17 @@ interface EntryRecord {
 }
 
 export class NativeZipArchive implements ZipArchive {
+  private readonly bytes: Uint8Array<ArrayBuffer>;
   private readonly view: DataView;
   private readonly records: ReadonlyMap<string, EntryRecord>;
   private readonly entryList: readonly ZipEntry[];
 
-  constructor(private readonly bytes: Uint8Array) {
+  constructor(bytes: Uint8Array) {
     if (bytes.length < EOCD_MIN_SIZE) {
       throw new Error("Malformed zip: too short to contain a central directory");
     }
-    this.view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    this.bytes = arrayBufferBacked(bytes);
+    this.view = new DataView(this.bytes.buffer, this.bytes.byteOffset, this.bytes.byteLength);
     this.records = this.readCentralDirectory();
     this.entryList = [...this.records].map(([path, record]) => ({
       path,
@@ -76,12 +78,10 @@ export class NativeZipArchive implements ZipArchive {
     if (record.method === DEFLATE) {
       const stream = new DecompressionStream("deflate-raw");
       const writer = stream.writable.getWriter();
-      // DecompressionStream needs an ArrayBuffer-backed view, so copy the slice
-      // off the source buffer, which the type system treats as possibly shared.
       // The write can only fail as the consumer pulls, where the readable side
       // reports it, so this catch just stops that error from also going unhandled.
       void writer
-        .write(new Uint8Array(compressed))
+        .write(compressed)
         .then(() => writer.close())
         .catch(() => {});
       return stream.readable;
@@ -139,7 +139,7 @@ export class NativeZipArchive implements ZipArchive {
   // A local header repeats the name and extra fields with their own lengths,
   // which can differ from the central directory, so the data offset is only
   // known after reading them here.
-  private compressedData(record: EntryRecord): Uint8Array {
+  private compressedData(record: EntryRecord): Uint8Array<ArrayBuffer> {
     const offset = record.localHeaderOffset;
     if (this.view.getUint32(offset, true) !== LOCAL_HEADER_SIGNATURE) {
       throw new Error("Malformed zip: expected a local file header");
@@ -153,4 +153,15 @@ export class NativeZipArchive implements ZipArchive {
   private decodeName(start: number, length: number): string {
     return new TextDecoder().decode(this.bytes.subarray(start, start + length));
   }
+}
+
+// The reader indexes the archive by byte offset and views slices out without
+// copying. DecompressionStream's writer only accepts an ArrayBuffer-backed view,
+// so the whole archive is normalised to one here. This re-views the same buffer
+// with no copy. Only a SharedArrayBuffer, which our inputs never are, falls back
+// to copying.
+function arrayBufferBacked(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+  return bytes.buffer instanceof ArrayBuffer
+    ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    : new Uint8Array(bytes);
 }
