@@ -1,12 +1,13 @@
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
+import { BytesByteRange } from "../src/io/byte-range";
 import { readStyles } from "../src/xlsx/read-styles";
 import { SaxesXmlReader } from "../src/xml/saxes-xml-reader";
 import { openZip } from "../src/zip/open-zip";
 
 async function stylesFrom(styleSheet: string) {
   const bytes = zipSync({ "xl/styles.xml": strToU8(styleSheet) });
-  return readStyles(await openZip(bytes), new SaxesXmlReader());
+  return readStyles(await openZip(new BytesByteRange(bytes)), new SaxesXmlReader());
 }
 
 describe("readStyles", () => {

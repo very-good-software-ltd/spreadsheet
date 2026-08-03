@@ -23,6 +23,11 @@ const LOCAL_HEADER_SIZE = 30;
 const MAX_COMMENT_SIZE = 0xffff;
 const OVERFLOW_32 = 0xffff_ffff;
 
+// A seekable source reads each entry in windows of this size rather than whole,
+// so a large entry is never fully resident. In-memory reads ignore it, since a
+// window is a view, not a copy.
+const ENTRY_CHUNK_SIZE = 1 << 20;
+
 interface EntryRecord {
   readonly method: number;
   readonly compressedSize: number;
@@ -66,17 +71,7 @@ export class NativeZipArchive implements ZipArchive {
     }
 
     if (record.method === STORED) {
-      const source = this.source;
-      return new ReadableStream<Uint8Array>({
-        async start(controller): Promise<void> {
-          try {
-            controller.enqueue(await compressedData(source, record));
-            controller.close();
-          } catch (error) {
-            controller.error(error);
-          }
-        },
-      });
+      return this.entryStream(record);
     }
     if (record.method === DEFLATE) {
       const stream = new DecompressionStream("deflate-raw");
@@ -86,10 +81,33 @@ export class NativeZipArchive implements ZipArchive {
     throw new Error(`Unsupported compression method ${record.method} for ${path}`);
   }
 
+  private entryStream(record: EntryRecord): ReadableStream<Uint8Array<ArrayBuffer>> {
+    const chunks = readEntryChunks(this.source, record)[Symbol.asyncIterator]();
+    return new ReadableStream<Uint8Array<ArrayBuffer>>({
+      async pull(controller): Promise<void> {
+        try {
+          const { done, value } = await chunks.next();
+          if (done) {
+            controller.close();
+          } else {
+            controller.enqueue(value);
+          }
+        } catch (error) {
+          controller.error(error);
+        }
+      },
+      cancel(): void {
+        void chunks.return?.(undefined);
+      },
+    });
+  }
+
   private async inflate(writable: WritableStream<Uint8Array<ArrayBuffer>>, record: EntryRecord): Promise<void> {
     const writer = writable.getWriter();
     try {
-      await writer.write(await compressedData(this.source, record));
+      for await (const chunk of readEntryChunks(this.source, record)) {
+        await writer.write(chunk);
+      }
       await writer.close();
     } catch (error) {
       await writer.abort(error).catch(() => {});
@@ -152,10 +170,18 @@ function findEndOfCentralDirectory(view: DataView, length: number): number {
   throw new Error("Malformed zip: no end of central directory record");
 }
 
+async function* readEntryChunks(source: ByteRange, record: EntryRecord): AsyncIterable<Uint8Array<ArrayBuffer>> {
+  const dataStart = await entryDataStart(source, record);
+  for (let offset = 0; offset < record.compressedSize; offset += ENTRY_CHUNK_SIZE) {
+    const length = Math.min(ENTRY_CHUNK_SIZE, record.compressedSize - offset);
+    yield await source.read(dataStart + offset, length);
+  }
+}
+
 // A local header repeats the name and extra fields with their own lengths,
 // which can differ from the central directory, so the data offset is only known
 // after reading them here.
-async function compressedData(source: ByteRange, record: EntryRecord): Promise<Uint8Array<ArrayBuffer>> {
+async function entryDataStart(source: ByteRange, record: EntryRecord): Promise<number> {
   const header = await source.read(record.localHeaderOffset, LOCAL_HEADER_SIZE);
   const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
   if (view.getUint32(0, true) !== LOCAL_HEADER_SIGNATURE) {
@@ -163,6 +189,5 @@ async function compressedData(source: ByteRange, record: EntryRecord): Promise<U
   }
   const nameLength = view.getUint16(26, true);
   const extraLength = view.getUint16(28, true);
-  const dataStart = record.localHeaderOffset + LOCAL_HEADER_SIZE + nameLength + extraLength;
-  return source.read(dataStart, record.compressedSize);
+  return record.localHeaderOffset + LOCAL_HEADER_SIZE + nameLength + extraLength;
 }

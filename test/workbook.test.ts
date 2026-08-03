@@ -11,6 +11,14 @@ async function firstCellValue(worksheet: Worksheet): Promise<unknown> {
   return undefined;
 }
 
+async function allCells(worksheet: Worksheet): Promise<unknown[][]> {
+  const rows: unknown[][] = [];
+  for await (const row of worksheet.rows()) {
+    rows.push(row.cells.map((cell) => cell.value));
+  }
+  return rows;
+}
+
 describe("Workbook", () => {
   it("lists worksheet names in document order", async () => {
     const workbook = await Workbook.open(
@@ -48,6 +56,24 @@ describe("Workbook", () => {
     expect(await firstCellValue(workbook.worksheet("Second"))).toBe("b");
     expect(await firstCellValue(workbook.worksheet(1))).toBe("b");
     expect(await firstCellValue(workbook.firstWorksheet())).toBe("a");
+  });
+
+  it("reads a workbook from a seekable Blob the same as from its bytes", async () => {
+    const bytes = xlsx([
+      {
+        name: "Sheet1",
+        rows: [
+          ["a", 1, { boolean: true }],
+          ["b", 2, new Date(Date.UTC(2020, 0, 15))],
+        ],
+      },
+    ]);
+
+    const fromBytes = await Workbook.open(bytes);
+    const fromBlob = await Workbook.open(new Blob([new Uint8Array(bytes)]));
+
+    expect(fromBlob.worksheetNames).toEqual(fromBytes.worksheetNames);
+    expect(await allCells(fromBlob.worksheet("Sheet1"))).toEqual(await allCells(fromBytes.worksheet("Sheet1")));
   });
 
   it("throws for an out-of-range worksheet index", async () => {

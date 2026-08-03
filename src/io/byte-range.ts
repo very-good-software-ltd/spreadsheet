@@ -1,3 +1,5 @@
+import { type BinarySource, readAllBytes } from "./source";
+
 export interface ByteRange {
   readonly size: number;
   read(offset: number, length: number): Promise<Uint8Array<ArrayBuffer>>;
@@ -17,6 +19,25 @@ export class BytesByteRange implements ByteRange {
   read(offset: number, length: number): Promise<Uint8Array<ArrayBuffer>> {
     return Promise.resolve(this.bytes.subarray(offset, offset + length));
   }
+}
+
+export class BlobByteRange implements ByteRange {
+  constructor(private readonly blob: Blob) {}
+
+  get size(): number {
+    return this.blob.size;
+  }
+
+  async read(offset: number, length: number): Promise<Uint8Array<ArrayBuffer>> {
+    return new Uint8Array(await this.blob.slice(offset, offset + length).arrayBuffer());
+  }
+}
+
+export async function toByteRange(source: BinarySource | Blob): Promise<ByteRange> {
+  if (source instanceof Blob) {
+    return new BlobByteRange(source);
+  }
+  return new BytesByteRange(await readAllBytes(source));
 }
 
 // DecompressionStream's writer only accepts an ArrayBuffer-backed view, so the
