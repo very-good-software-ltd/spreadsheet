@@ -46,14 +46,32 @@ export class Workbook {
     return this.refs.map((ref) => ref.name);
   }
 
-  worksheet(name: string): Worksheet {
-    const ref = this.refs.find((candidate) => candidate.name === name);
+  worksheet(nameOrIndex: string | number): Worksheet {
+    const ref =
+      typeof nameOrIndex === "number"
+        ? this.refs[nameOrIndex]
+        : this.refs.find((candidate) => candidate.name === nameOrIndex);
 
     if (ref === undefined) {
-      throw new Error(`Worksheet not found: ${name}`);
+      throw new Error(`Worksheet not found: ${nameOrIndex}`);
     }
+
+    return this.worksheetFrom(ref);
+  }
+
+  firstWorksheet(): Worksheet {
+    const ref = this.refs[0];
+
+    if (ref === undefined) {
+      throw new Error("Workbook has no worksheets");
+    }
+
+    return this.worksheetFrom(ref);
+  }
+
+  private worksheetFrom(ref: WorksheetRef): Worksheet {
     if (!this.archive.has(ref.path)) {
-      throw new Error(`Worksheet "${name}" is missing its data part in the archive`);
+      throw new Error(`Worksheet "${ref.name}" is missing its data part in the archive`);
     }
 
     return new Worksheet(this.archive, this.xml, ref.path, this.context);

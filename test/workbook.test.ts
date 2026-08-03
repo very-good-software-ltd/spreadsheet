@@ -1,7 +1,15 @@
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { Workbook } from "../src/xlsx/workbook";
+import type { Worksheet } from "../src/xlsx/worksheet";
 import { xlsx } from "./support/xlsx-fixture";
+
+async function firstCellValue(worksheet: Worksheet): Promise<unknown> {
+  for await (const row of worksheet.rows()) {
+    return row.cells[0]?.value;
+  }
+  return undefined;
+}
 
 describe("Workbook", () => {
   it("lists worksheet names in document order", async () => {
@@ -27,6 +35,25 @@ describe("Workbook", () => {
       { name: "Visible", hidden: false },
       { name: "Hidden", hidden: true },
     ]);
+  });
+
+  it("gets a worksheet by name, index, or the first one", async () => {
+    const workbook = await Workbook.open(
+      xlsx([
+        { name: "First", rows: [["a"]] },
+        { name: "Second", rows: [["b"]] },
+      ]),
+    );
+
+    expect(await firstCellValue(workbook.worksheet("Second"))).toBe("b");
+    expect(await firstCellValue(workbook.worksheet(1))).toBe("b");
+    expect(await firstCellValue(workbook.firstWorksheet())).toBe("a");
+  });
+
+  it("throws for an out-of-range worksheet index", async () => {
+    const workbook = await Workbook.open(xlsx([{ name: "Only", rows: [] }]));
+
+    expect(() => workbook.worksheet(5)).toThrow(/not found/i);
   });
 
   it("rejects bytes that are not a zip at all", async () => {
