@@ -1,5 +1,7 @@
 export interface XmlReader {
-  read(source: ReadableStream<Uint8Array>): AsyncIterable<XmlEvent>;
+  // Yields the events from one input chunk at a time, so a caller crosses the
+  // async boundary once per chunk and then loops the batch, not once per event.
+  read(source: ReadableStream<Uint8Array>): AsyncIterable<readonly XmlEvent[]>;
 }
 
 export type XmlEvent = XmlOpen | XmlText | XmlClose;

@@ -41,22 +41,24 @@ export async function readWorkbook(archive: ZipArchive, xml: XmlReader): Promise
   const worksheets: WorksheetRef[] = [];
   let date1904 = false;
 
-  for await (const event of readPart(archive, xml, WORKBOOK_PART)) {
-    if (event.type !== "open") {
-      continue;
-    }
-    if (event.name === Element.Properties) {
-      const flag = event.attributes[Attribute.Date1904];
-      date1904 = flag === "1" || flag === "true";
-    } else if (event.name === Element.Sheet) {
-      const name = event.attributes[Attribute.Name];
-      if (name === undefined) {
+  for await (const batch of readPart(archive, xml, WORKBOOK_PART)) {
+    for (const event of batch) {
+      if (event.type !== "open") {
         continue;
       }
-      const relId = event.attributes[Attribute.RelationshipId];
-      const path = relId === undefined ? undefined : relationships.get(relId);
-      const hidden = HIDDEN_STATES.has(event.attributes[Attribute.State] ?? "");
-      worksheets.push({ name, path: path ?? "", hidden });
+      if (event.name === Element.Properties) {
+        const flag = event.attributes[Attribute.Date1904];
+        date1904 = flag === "1" || flag === "true";
+      } else if (event.name === Element.Sheet) {
+        const name = event.attributes[Attribute.Name];
+        if (name === undefined) {
+          continue;
+        }
+        const relId = event.attributes[Attribute.RelationshipId];
+        const path = relId === undefined ? undefined : relationships.get(relId);
+        const hidden = HIDDEN_STATES.has(event.attributes[Attribute.State] ?? "");
+        worksheets.push({ name, path: path ?? "", hidden });
+      }
     }
   }
 

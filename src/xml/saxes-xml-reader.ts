@@ -2,7 +2,7 @@ import { SaxesParser } from "saxes";
 import type { XmlEvent, XmlReader } from "./xml-reader";
 
 export class SaxesXmlReader implements XmlReader {
-  async *read(source: ReadableStream<Uint8Array>): AsyncIterable<XmlEvent> {
+  async *read(source: ReadableStream<Uint8Array>): AsyncIterable<readonly XmlEvent[]> {
     const parser = new SaxesParser();
     const pending: XmlEvent[] = [];
 
@@ -29,10 +29,14 @@ export class SaxesXmlReader implements XmlReader {
           break;
         }
         parser.write(decoder.decode(value, { stream: true }));
-        yield* pending.splice(0);
+        if (pending.length > 0) {
+          yield pending.splice(0);
+        }
       }
       parser.close();
-      yield* pending.splice(0);
+      if (pending.length > 0) {
+        yield pending.splice(0);
+      }
     } finally {
       reader.releaseLock();
     }

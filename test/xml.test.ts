@@ -14,8 +14,8 @@ function streamOf(text: string): ReadableStream<Uint8Array> {
 
 async function collect(source: ReadableStream<Uint8Array>): Promise<XmlEvent[]> {
   const events: XmlEvent[] = [];
-  for await (const event of new SaxesXmlReader().read(source)) {
-    events.push(event);
+  for await (const batch of new SaxesXmlReader().read(source)) {
+    events.push(...batch);
   }
   return events;
 }

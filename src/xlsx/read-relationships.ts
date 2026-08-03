@@ -19,12 +19,14 @@ export async function readWorkbookRelationships(archive: ZipArchive, xml: XmlRea
     return targets;
   }
 
-  for await (const event of readPart(archive, xml, RELATIONSHIPS_PART)) {
-    if (event.type === "open" && event.name === Element.Relationship) {
-      const id = event.attributes[Attribute.Id];
-      const target = event.attributes[Attribute.Target];
-      if (id !== undefined && target !== undefined) {
-        targets.set(id, resolvePartPath(target));
+  for await (const batch of readPart(archive, xml, RELATIONSHIPS_PART)) {
+    for (const event of batch) {
+      if (event.type === "open" && event.name === Element.Relationship) {
+        const id = event.attributes[Attribute.Id];
+        const target = event.attributes[Attribute.Target];
+        if (id !== undefined && target !== undefined) {
+          targets.set(id, resolvePartPath(target));
+        }
       }
     }
   }

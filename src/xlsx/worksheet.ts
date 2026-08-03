@@ -35,39 +35,41 @@ export class Worksheet {
     let valueText: string | null = null;
     let capturing = false;
 
-    for await (const event of readPart(this.archive, this.xml, this.path)) {
-      switch (event.type) {
-        case "open":
-          if (event.name === Element.Row) {
-            rowNumber = Number(event.attributes[Attribute.Reference] ?? "0");
-            cells = [];
-          } else if (event.name === Element.Cell) {
-            cellRef = event.attributes[Attribute.Reference] ?? "";
-            cellTypeCode = event.attributes[Attribute.Type] ?? "";
-            cellStyleIndex = styleIndexOf(event.attributes[Attribute.Style]);
-            valueText = null;
-          } else if (event.name === Element.Value || event.name === Element.Text) {
-            capturing = true;
-            valueText ??= "";
-          }
-          break;
-        case "text":
-          if (capturing && valueText !== null) {
-            valueText += event.text;
-          }
-          break;
-        case "close":
-          if (event.name === Element.Value || event.name === Element.Text) {
-            capturing = false;
-          } else if (event.name === Element.Cell) {
-            if (valueText !== null) {
-              const value = interpretCellValue(cellRef, cellTypeCode, cellStyleIndex, valueText, this.context);
-              cells.push({ ref: cellRef, columnIndex: columnIndexOf(cellRef), ...value });
+    for await (const batch of readPart(this.archive, this.xml, this.path)) {
+      for (const event of batch) {
+        switch (event.type) {
+          case "open":
+            if (event.name === Element.Row) {
+              rowNumber = Number(event.attributes[Attribute.Reference] ?? "0");
+              cells = [];
+            } else if (event.name === Element.Cell) {
+              cellRef = event.attributes[Attribute.Reference] ?? "";
+              cellTypeCode = event.attributes[Attribute.Type] ?? "";
+              cellStyleIndex = styleIndexOf(event.attributes[Attribute.Style]);
+              valueText = null;
+            } else if (event.name === Element.Value || event.name === Element.Text) {
+              capturing = true;
+              valueText ??= "";
             }
-          } else if (event.name === Element.Row) {
-            yield new Row(rowNumber, cells);
-          }
-          break;
+            break;
+          case "text":
+            if (capturing && valueText !== null) {
+              valueText += event.text;
+            }
+            break;
+          case "close":
+            if (event.name === Element.Value || event.name === Element.Text) {
+              capturing = false;
+            } else if (event.name === Element.Cell) {
+              if (valueText !== null) {
+                const value = interpretCellValue(cellRef, cellTypeCode, cellStyleIndex, valueText, this.context);
+                cells.push({ ref: cellRef, columnIndex: columnIndexOf(cellRef), ...value });
+              }
+            } else if (event.name === Element.Row) {
+              yield new Row(rowNumber, cells);
+            }
+            break;
+        }
       }
     }
   }

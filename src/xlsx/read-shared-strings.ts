@@ -18,28 +18,30 @@ export async function readSharedStrings(archive: ZipArchive, xml: XmlReader): Pr
   let current: string | null = null;
   let inText = false;
 
-  for await (const event of readPart(archive, xml, SHARED_STRINGS_PART)) {
-    switch (event.type) {
-      case "open":
-        if (event.name === Element.StringItem) {
-          current = "";
-        } else if (event.name === Element.Text) {
-          inText = true;
-        }
-        break;
-      case "text":
-        if (inText && current !== null) {
-          current += event.text;
-        }
-        break;
-      case "close":
-        if (event.name === Element.Text) {
-          inText = false;
-        } else if (event.name === Element.StringItem) {
-          strings.push(current ?? "");
-          current = null;
-        }
-        break;
+  for await (const batch of readPart(archive, xml, SHARED_STRINGS_PART)) {
+    for (const event of batch) {
+      switch (event.type) {
+        case "open":
+          if (event.name === Element.StringItem) {
+            current = "";
+          } else if (event.name === Element.Text) {
+            inText = true;
+          }
+          break;
+        case "text":
+          if (inText && current !== null) {
+            current += event.text;
+          }
+          break;
+        case "close":
+          if (event.name === Element.Text) {
+            inText = false;
+          } else if (event.name === Element.StringItem) {
+            strings.push(current ?? "");
+            current = null;
+          }
+          break;
+      }
     }
   }
 

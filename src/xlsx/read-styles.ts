@@ -52,22 +52,24 @@ export async function readStyles(archive: ZipArchive, xml: XmlReader): Promise<S
 
   let inCellFormats = false;
 
-  for await (const event of readPart(archive, xml, STYLES_PART)) {
-    if (event.type === "open") {
-      if (event.name === Element.CellFormats) {
-        inCellFormats = true;
-      } else if (event.name === Element.Format && inCellFormats) {
-        cellNumberFormatIds.push(Number(event.attributes[Attribute.NumberFormatId] ?? "0"));
-      } else if (event.name === Element.NumberFormat) {
-        const id = event.attributes[Attribute.NumberFormatId];
-        const code = event.attributes[Attribute.FormatCode];
+  for await (const batch of readPart(archive, xml, STYLES_PART)) {
+    for (const event of batch) {
+      if (event.type === "open") {
+        if (event.name === Element.CellFormats) {
+          inCellFormats = true;
+        } else if (event.name === Element.Format && inCellFormats) {
+          cellNumberFormatIds.push(Number(event.attributes[Attribute.NumberFormatId] ?? "0"));
+        } else if (event.name === Element.NumberFormat) {
+          const id = event.attributes[Attribute.NumberFormatId];
+          const code = event.attributes[Attribute.FormatCode];
 
-        if (id !== undefined && code !== undefined) {
-          customFormatCodes.set(Number(id), code);
+          if (id !== undefined && code !== undefined) {
+            customFormatCodes.set(Number(id), code);
+          }
         }
+      } else if (event.type === "close" && event.name === Element.CellFormats) {
+        inCellFormats = false;
       }
-    } else if (event.type === "close" && event.name === Element.CellFormats) {
-      inCellFormats = false;
     }
   }
 
