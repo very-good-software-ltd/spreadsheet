@@ -28,6 +28,22 @@ describe("readStyles", () => {
     expect(styles.isDateStyle(1)).toBe(false);
   });
 
+  it("does not treat currency or percent formats as dates, but does treat a time format", async () => {
+    const styles = await stylesFrom(
+      "<styleSheet><numFmts>" +
+        '<numFmt numFmtId="164" formatCode="&quot;$&quot;#,##0.00"/>' +
+        '<numFmt numFmtId="165" formatCode="0.00%"/>' +
+        '<numFmt numFmtId="166" formatCode="h:mm:ss"/>' +
+        "</numFmts><cellXfs>" +
+        '<xf numFmtId="164"/><xf numFmtId="165"/><xf numFmtId="166"/>' +
+        "</cellXfs></styleSheet>",
+    );
+
+    expect(styles.isDateStyle(0)).toBe(false);
+    expect(styles.isDateStyle(1)).toBe(false);
+    expect(styles.isDateStyle(2)).toBe(true);
+  });
+
   it("ignores xf elements outside cellXfs", async () => {
     const styles = await stylesFrom(
       '<styleSheet><cellStyleXfs><xf numFmtId="14"/></cellStyleXfs><cellXfs><xf numFmtId="0"/></cellXfs></styleSheet>',

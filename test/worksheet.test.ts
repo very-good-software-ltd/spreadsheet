@@ -83,9 +83,25 @@ describe("Worksheet rows", () => {
     expect(rows[0]?.cells).toEqual([{ ref: "A1", columnIndex: 0, type: "date", value: date }]);
   });
 
+  it("reads a styled number with a time of day as a date and time", async () => {
+    const date = new Date(Date.UTC(2020, 0, 15, 13, 30));
+
+    const [row] = await rowsOf({ name: "Data", rows: [[date]] });
+
+    expect(row?.cells).toEqual([{ ref: "A1", columnIndex: 0, type: "date", value: date }]);
+  });
+
+  it("reads an explicit t=d date cell from its ISO value", async () => {
+    const [row] = await rowsOf({ name: "Data", rows: [[{ isoDate: "2020-01-15T13:30:00" }]] });
+
+    expect(row?.cells).toEqual([
+      { ref: "A1", columnIndex: 0, type: "date", value: new Date(Date.UTC(2020, 0, 15, 13, 30)) },
+    ]);
+  });
+
   it("throws on an unsupported cell type", async () => {
-    await expect(rowsOf({ name: "Data", rows: [[{ rawType: "d" }]] })).rejects.toThrow(
-      'Unsupported cell type "d" at A1',
+    await expect(rowsOf({ name: "Data", rows: [[{ rawType: "zzz" }]] })).rejects.toThrow(
+      'Unsupported cell type "zzz" at A1',
     );
   });
 });

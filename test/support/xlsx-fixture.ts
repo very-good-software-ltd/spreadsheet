@@ -8,6 +8,7 @@ type CellInput =
   | { readonly error: string }
   | { readonly inlineString: string }
   | { readonly formulaString: string }
+  | { readonly isoDate: string }
   | { readonly rawType: string };
 
 export interface SheetInput {
@@ -57,6 +58,9 @@ export function xlsx(sheets: readonly SheetInput[], options: WorkbookOptions = {
     }
     if ("formulaString" in value) {
       return `<c r="${ref}" t="str"><v>${value.formulaString}</v></c>`;
+    }
+    if ("isoDate" in value) {
+      return `<c r="${ref}" t="d"><v>${value.isoDate}</v></c>`;
     }
     return `<c r="${ref}" t="${value.rawType}"><v>0</v></c>`;
   };

@@ -1,5 +1,5 @@
 import type { CellValue } from "./cell";
-import { serialToDate } from "./date";
+import { parseIsoDate, serialToDate } from "./date";
 import type { Styles } from "./read-styles";
 
 const CellTypeCode = {
@@ -43,6 +43,8 @@ export function interpretCellValue(
       return { type: "boolean", value: text !== "0" };
     case CellTypeCode.Error:
       return { type: "error", value: text };
+    case CellTypeCode.Date:
+      return { type: "date", value: parseIsoDate(text) };
     default:
       throw new Error(`Unsupported cell type "${typeCode}" at ${ref}`);
   }
