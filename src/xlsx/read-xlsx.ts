@@ -12,7 +12,7 @@ import { readWorkbook } from "./read-workbook";
 export async function readXlsx(bytes: Uint8Array): Promise<WorkbookData> {
   let archive: ZipArchive;
   try {
-    archive = openZip(bytes);
+    archive = await openZip(bytes);
   } catch (cause) {
     throw new Error("Not a valid xlsx file: could not read it as a zip", { cause });
   }

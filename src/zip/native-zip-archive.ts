@@ -1,10 +1,11 @@
+import type { ByteRange } from "../io/byte-range";
 import { readAllBytes } from "../io/source";
 import type { ZipArchive, ZipEntry } from "./zip-archive";
 
-// A read-only ZIP reader over the whole archive bytes. It parses the central
-// directory to locate entries, then decompresses each entry on demand through
-// the platform's DecompressionStream, so a large entry is never fully held in
-// memory. Field offsets are from the ZIP spec (PKWARE APPNOTE.TXT, 4.3).
+// A read-only ZIP reader over a ByteRange. It reads the central directory to
+// locate entries, then reads and decompresses each entry on demand, so the
+// whole archive need never be held. Field offsets are from the ZIP spec (PKWARE
+// APPNOTE.TXT, 4.3).
 //
 // Not supported, each throws rather than misreading: Zip64 (sizes or offsets
 // that overflow 32 bits), encryption, and compression methods other than
@@ -18,6 +19,7 @@ const STORED = 0;
 const DEFLATE = 8;
 
 const EOCD_MIN_SIZE = 22;
+const LOCAL_HEADER_SIZE = 30;
 const MAX_COMMENT_SIZE = 0xffff;
 const OVERFLOW_32 = 0xffff_ffff;
 
@@ -29,22 +31,20 @@ interface EntryRecord {
 }
 
 export class NativeZipArchive implements ZipArchive {
-  private readonly bytes: Uint8Array<ArrayBuffer>;
-  private readonly view: DataView;
-  private readonly records: ReadonlyMap<string, EntryRecord>;
-  private readonly entryList: readonly ZipEntry[];
-
-  constructor(bytes: Uint8Array) {
-    if (bytes.length < EOCD_MIN_SIZE) {
+  static async open(source: ByteRange): Promise<NativeZipArchive> {
+    if (source.size < EOCD_MIN_SIZE) {
       throw new Error("Malformed zip: too short to contain a central directory");
     }
-    this.bytes = arrayBufferBacked(bytes);
-    this.view = new DataView(this.bytes.buffer, this.bytes.byteOffset, this.bytes.byteLength);
-    this.records = this.readCentralDirectory();
-    this.entryList = [...this.records].map(([path, record]) => ({
-      path,
-      size: record.uncompressedSize,
-    }));
+    return new NativeZipArchive(source, await readCentralDirectory(source));
+  }
+
+  private readonly entryList: readonly ZipEntry[];
+
+  private constructor(
+    private readonly source: ByteRange,
+    private readonly records: ReadonlyMap<string, EntryRecord>,
+  ) {
+    this.entryList = [...records].map(([path, record]) => ({ path, size: record.uncompressedSize }));
   }
 
   entries(): readonly ZipEntry[] {
@@ -65,103 +65,104 @@ export class NativeZipArchive implements ZipArchive {
       throw new Error(`Zip entry not found: ${path}`);
     }
 
-    const compressed = this.compressedData(record);
-
     if (record.method === STORED) {
+      const source = this.source;
       return new ReadableStream<Uint8Array>({
-        start(controller): void {
-          controller.enqueue(compressed);
-          controller.close();
+        async start(controller): Promise<void> {
+          try {
+            controller.enqueue(await compressedData(source, record));
+            controller.close();
+          } catch (error) {
+            controller.error(error);
+          }
         },
       });
     }
     if (record.method === DEFLATE) {
       const stream = new DecompressionStream("deflate-raw");
-      const writer = stream.writable.getWriter();
-      // The write can only fail as the consumer pulls, where the readable side
-      // reports it, so this catch just stops that error from also going unhandled.
-      void writer
-        .write(compressed)
-        .then(() => writer.close())
-        .catch(() => {});
+      void this.inflate(stream.writable, record);
       return stream.readable;
     }
     throw new Error(`Unsupported compression method ${record.method} for ${path}`);
   }
 
-  private readCentralDirectory(): Map<string, EntryRecord> {
-    const eocd = this.findEndOfCentralDirectory();
-    const entryCount = this.view.getUint16(eocd + 10, true);
-    if (entryCount === 0xffff) {
-      throw new Error("Zip64 archives are not supported");
+  private async inflate(writable: WritableStream<Uint8Array<ArrayBuffer>>, record: EntryRecord): Promise<void> {
+    const writer = writable.getWriter();
+    try {
+      await writer.write(await compressedData(this.source, record));
+      await writer.close();
+    } catch (error) {
+      await writer.abort(error).catch(() => {});
     }
-
-    const records = new Map<string, EntryRecord>();
-    let pos = this.view.getUint32(eocd + 16, true);
-    for (let i = 0; i < entryCount; i++) {
-      if (this.view.getUint32(pos, true) !== CENTRAL_HEADER_SIGNATURE) {
-        throw new Error("Malformed zip: expected a central directory header");
-      }
-
-      const method = this.view.getUint16(pos + 10, true);
-      const compressedSize = this.view.getUint32(pos + 20, true);
-      const uncompressedSize = this.view.getUint32(pos + 24, true);
-      const nameLength = this.view.getUint16(pos + 28, true);
-      const extraLength = this.view.getUint16(pos + 30, true);
-      const commentLength = this.view.getUint16(pos + 32, true);
-      const localHeaderOffset = this.view.getUint32(pos + 42, true);
-
-      if (compressedSize === OVERFLOW_32 || uncompressedSize === OVERFLOW_32 || localHeaderOffset === OVERFLOW_32) {
-        throw new Error("Zip64 archives are not supported");
-      }
-
-      const name = this.decodeName(pos + 46, nameLength);
-      records.set(name, { method, compressedSize, uncompressedSize, localHeaderOffset });
-
-      pos += 46 + nameLength + extraLength + commentLength;
-    }
-
-    return records;
-  }
-
-  // The end of central directory record sits at the very end, unless a trailing
-  // comment pushes it earlier, so scan backwards for its signature.
-  private findEndOfCentralDirectory(): number {
-    const earliest = Math.max(0, this.bytes.length - EOCD_MIN_SIZE - MAX_COMMENT_SIZE);
-    for (let pos = this.bytes.length - EOCD_MIN_SIZE; pos >= earliest; pos--) {
-      if (this.view.getUint32(pos, true) === END_OF_CENTRAL_DIRECTORY_SIGNATURE) {
-        return pos;
-      }
-    }
-    throw new Error("Malformed zip: no end of central directory record");
-  }
-
-  // A local header repeats the name and extra fields with their own lengths,
-  // which can differ from the central directory, so the data offset is only
-  // known after reading them here.
-  private compressedData(record: EntryRecord): Uint8Array<ArrayBuffer> {
-    const offset = record.localHeaderOffset;
-    if (this.view.getUint32(offset, true) !== LOCAL_HEADER_SIGNATURE) {
-      throw new Error("Malformed zip: expected a local file header");
-    }
-    const nameLength = this.view.getUint16(offset + 26, true);
-    const extraLength = this.view.getUint16(offset + 28, true);
-    const dataStart = offset + 30 + nameLength + extraLength;
-    return this.bytes.subarray(dataStart, dataStart + record.compressedSize);
-  }
-
-  private decodeName(start: number, length: number): string {
-    return new TextDecoder().decode(this.bytes.subarray(start, start + length));
   }
 }
 
-// The reader indexes the archive by byte offset and views slices out without
-// copying. DecompressionStream's writer only accepts an ArrayBuffer-backed view,
-// so the whole archive is normalised to one here. This re-views the same buffer
-// with no copy. Only a SharedArrayBuffer, which our inputs never are, falls back
-// to copying.
-function arrayBufferBacked(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
-  return bytes.buffer instanceof ArrayBuffer
-    ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
-    : new Uint8Array(bytes);
+async function readCentralDirectory(source: ByteRange): Promise<Map<string, EntryRecord>> {
+  const tailSize = Math.min(source.size, EOCD_MIN_SIZE + MAX_COMMENT_SIZE);
+  const tail = await source.read(source.size - tailSize, tailSize);
+  const tailView = new DataView(tail.buffer, tail.byteOffset, tail.byteLength);
+  const eocd = findEndOfCentralDirectory(tailView, tail.length);
+
+  const entryCount = tailView.getUint16(eocd + 10, true);
+  const directorySize = tailView.getUint32(eocd + 12, true);
+  const directoryOffset = tailView.getUint32(eocd + 16, true);
+  if (entryCount === 0xffff || directorySize === OVERFLOW_32 || directoryOffset === OVERFLOW_32) {
+    throw new Error("Zip64 archives are not supported");
+  }
+
+  const directory = await source.read(directoryOffset, directorySize);
+  const view = new DataView(directory.buffer, directory.byteOffset, directory.byteLength);
+  const decoder = new TextDecoder();
+  const records = new Map<string, EntryRecord>();
+  let pos = 0;
+  for (let i = 0; i < entryCount; i++) {
+    if (view.getUint32(pos, true) !== CENTRAL_HEADER_SIGNATURE) {
+      throw new Error("Malformed zip: expected a central directory header");
+    }
+
+    const method = view.getUint16(pos + 10, true);
+    const compressedSize = view.getUint32(pos + 20, true);
+    const uncompressedSize = view.getUint32(pos + 24, true);
+    const nameLength = view.getUint16(pos + 28, true);
+    const extraLength = view.getUint16(pos + 30, true);
+    const commentLength = view.getUint16(pos + 32, true);
+    const localHeaderOffset = view.getUint32(pos + 42, true);
+
+    if (compressedSize === OVERFLOW_32 || uncompressedSize === OVERFLOW_32 || localHeaderOffset === OVERFLOW_32) {
+      throw new Error("Zip64 archives are not supported");
+    }
+
+    const name = decoder.decode(directory.subarray(pos + 46, pos + 46 + nameLength));
+    records.set(name, { method, compressedSize, uncompressedSize, localHeaderOffset });
+
+    pos += 46 + nameLength + extraLength + commentLength;
+  }
+
+  return records;
+}
+
+// The end of central directory record sits at the very end, unless a trailing
+// comment pushes it earlier, so scan backwards for its signature.
+function findEndOfCentralDirectory(view: DataView, length: number): number {
+  for (let pos = length - EOCD_MIN_SIZE; pos >= 0; pos--) {
+    if (view.getUint32(pos, true) === END_OF_CENTRAL_DIRECTORY_SIGNATURE) {
+      return pos;
+    }
+  }
+  throw new Error("Malformed zip: no end of central directory record");
+}
+
+// A local header repeats the name and extra fields with their own lengths,
+// which can differ from the central directory, so the data offset is only known
+// after reading them here.
+async function compressedData(source: ByteRange, record: EntryRecord): Promise<Uint8Array<ArrayBuffer>> {
+  const header = await source.read(record.localHeaderOffset, LOCAL_HEADER_SIZE);
+  const view = new DataView(header.buffer, header.byteOffset, header.byteLength);
+  if (view.getUint32(0, true) !== LOCAL_HEADER_SIGNATURE) {
+    throw new Error("Malformed zip: expected a local file header");
+  }
+  const nameLength = view.getUint16(26, true);
+  const extraLength = view.getUint16(28, true);
+  const dataStart = record.localHeaderOffset + LOCAL_HEADER_SIZE + nameLength + extraLength;
+  return source.read(dataStart, record.compressedSize);
 }

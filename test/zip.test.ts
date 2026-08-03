@@ -1,6 +1,6 @@
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { NativeZipArchive } from "../src/zip/native-zip-archive";
+import { openZip } from "../src/zip/open-zip";
 
 // fflate writes the archives and our native reader reads them back, so a mature
 // implementation produces the input rather than a hand-authored one.
@@ -53,7 +53,7 @@ describe("NativeZipArchive", () => {
       "unïcode-nàme.xml": strToU8("<x/>"),
       "xl/worksheets/sheet1.xml": strToU8(`<worksheet>${"data ".repeat(3000)}</worksheet>`),
     };
-    const archive = new NativeZipArchive(zipSync(files));
+    const archive = await openZip(zipSync(files));
 
     expect(
       archive
@@ -69,7 +69,7 @@ describe("NativeZipArchive", () => {
 
   it("reads stored (uncompressed) entries", async () => {
     const files = { "a.txt": strToU8("hello"), "b.bin": strToU8("x".repeat(1000)) };
-    const archive = new NativeZipArchive(zipSync(files, { level: 0 }));
+    const archive = await openZip(zipSync(files, { level: 0 }));
 
     for (const [path, expected] of Object.entries(files)) {
       expect(await archive.read(path)).toEqual(expected);
@@ -78,7 +78,7 @@ describe("NativeZipArchive", () => {
 
   it("streams a large entry in multiple chunks", async () => {
     const original = strToU8("lorem ipsum ".repeat(100_000));
-    const archive = new NativeZipArchive(zipSync({ "big.xml": original }));
+    const archive = await openZip(zipSync({ "big.xml": original }));
 
     const chunks = await collectChunks(archive.openStream("big.xml"));
 
@@ -86,8 +86,8 @@ describe("NativeZipArchive", () => {
     expect(concat(chunks)).toEqual(original);
   });
 
-  it("throws for a missing entry", () => {
-    const archive = new NativeZipArchive(zipSync({ "a.txt": strToU8("hi") }));
+  it("throws for a missing entry", async () => {
+    const archive = await openZip(zipSync({ "a.txt": strToU8("hi") }));
 
     expect(() => archive.openStream("missing")).toThrow("Zip entry not found: missing");
   });
@@ -100,24 +100,24 @@ describe("NativeZipArchive", () => {
     bytes.set(comment, base.length);
     new DataView(bytes.buffer).setUint16(eocdOffset(base) + 20, comment.length, true);
 
-    const archive = new NativeZipArchive(bytes);
+    const archive = await openZip(bytes);
 
     expect(await archive.read("a.txt")).toEqual(strToU8("hello"));
   });
 
-  it("throws on an unsupported compression method", () => {
+  it("throws on an unsupported compression method", async () => {
     const bytes = zipSync({ "a.txt": strToU8("hello ".repeat(100)) });
     new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint16(
       centralDirectoryOffset(bytes) + 10,
       99,
       true,
     );
-    const archive = new NativeZipArchive(bytes);
+    const archive = await openZip(bytes);
 
     expect(() => archive.openStream("a.txt")).toThrow("Unsupported compression method 99");
   });
 
-  it("rejects zip64 archives", () => {
+  it("rejects zip64 archives", async () => {
     const bytes = zipSync({ "a.txt": strToU8("hello") });
     new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).setUint32(
       centralDirectoryOffset(bytes) + 20,
@@ -125,10 +125,10 @@ describe("NativeZipArchive", () => {
       true,
     );
 
-    expect(() => new NativeZipArchive(bytes)).toThrow("Zip64 archives are not supported");
+    await expect(openZip(bytes)).rejects.toThrow("Zip64 archives are not supported");
   });
 
-  it("rejects a buffer too short to be a zip", () => {
-    expect(() => new NativeZipArchive(new Uint8Array([1, 2, 3]))).toThrow("Malformed zip");
+  it("rejects a buffer too short to be a zip", async () => {
+    await expect(openZip(new Uint8Array([1, 2, 3]))).rejects.toThrow("Malformed zip");
   });
 });
