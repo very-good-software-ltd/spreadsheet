@@ -92,7 +92,9 @@ export function Demo() {
     setStatus("reading");
     setError("");
     try {
-      const workbook = await Workbook.open(await file.arrayBuffer());
+      // A File is a seekable Blob, so this reads it in ranges off disk rather
+      // than loading the whole file into memory first.
+      const workbook = await Workbook.open(file);
       workbookRef.current = workbook;
       setSheetNames(workbook.worksheetNames);
       const first = workbook.worksheetNames[0] ?? "";
