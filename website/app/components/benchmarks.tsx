@@ -8,8 +8,8 @@ export function Benchmarks() {
       <div className="mx-auto max-w-3xl">
         <h2 className="text-2xl font-bold">Benchmark</h2>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          Reading every cell of a 170 MB single-sheet file, 4.4 million cells, each library in its own Node process. The
-          bar is peak memory, the highest the process reached.
+          Reading every cell of a 28 MB file whose single sheet is 170 MB uncompressed, 4.4 million cells, each library
+          in its own Node process. The bar is peak memory, the highest the process reached.
         </p>
 
         <div className="mt-8 space-y-4">

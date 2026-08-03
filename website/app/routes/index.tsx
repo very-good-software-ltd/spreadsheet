@@ -5,7 +5,7 @@ export function meta() {
     { title: "very-good-spreadsheet" },
     {
       name: "description",
-      content: "Read Excel .xlsx files in Node and the browser, without loading the whole file into memory.",
+      content: "Read Excel .xlsx files in Node and the browser, without holding the whole sheet in memory.",
     },
   ];
 }

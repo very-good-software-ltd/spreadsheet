@@ -9,7 +9,7 @@ export interface Feature {
 export const FEATURES: readonly Feature[] = [
   {
     title: "Streaming, low memory",
-    body: "It streams the sheet instead of expanding the whole file in memory, so a spreadsheet that costs other libraries gigabytes reads here in a couple hundred megabytes.",
+    body: "It streams the sheet instead of expanding it in memory, so memory stays flat as the sheet grows. A file that costs other libraries gigabytes reads here in a couple hundred megabytes.",
   },
   {
     title: "Node and the browser",
@@ -37,10 +37,10 @@ export interface BenchmarkRow {
   readonly us?: boolean;
 }
 
-// Reading every cell of a 170 MB single-sheet file (4.44M cells), each library
-// in its own Node process. Reproduce with `npm run benchmark`.
+// Reading every cell of a 28 MB file whose single sheet is 170 MB uncompressed
+// (4.44M cells), each library in its own Node process. Reproduce with `npm run benchmark`.
 export const BENCHMARK: readonly BenchmarkRow[] = [
-  { library: "very-good-spreadsheet", mode: "streaming", timeSeconds: 3.4, peakMemoryMb: 173, us: true },
+  { library: "very-good-spreadsheet", mode: "streaming", timeSeconds: 3.4, peakMemoryMb: 145, us: true },
   { library: "exceljs", mode: "streaming", timeSeconds: 4.3, peakMemoryMb: 219 },
   { library: "SheetJS (xlsx)", mode: "loading", timeSeconds: 8.3, peakMemoryMb: 1503 },
   { library: "exceljs", mode: "loading", timeSeconds: 10.2, peakMemoryMb: 2756 },
