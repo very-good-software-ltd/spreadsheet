@@ -1,4 +1,4 @@
-import type { CellValue } from "./cell";
+import type { CellValue } from "../cell";
 import { parseIsoDate, serialToDate } from "./date";
 import type { Styles } from "./read-styles";
 

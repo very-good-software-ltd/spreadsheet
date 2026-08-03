@@ -1,7 +1,7 @@
 import { strToU8, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { Workbook } from "../src/xlsx/workbook";
-import type { Worksheet } from "../src/xlsx/worksheet";
+import { Workbook } from "../src/workbook";
+import type { Worksheet } from "../src/worksheet";
 import { xlsx } from "./support/xlsx-fixture";
 
 async function firstCellValue(worksheet: Worksheet): Promise<unknown> {
@@ -75,7 +75,7 @@ describe("Workbook", () => {
     });
     const opened = await Workbook.open(bytes);
 
-    expect(() => opened.worksheet("Data")).toThrow(/Data/);
+    expect(() => opened.worksheet("Data").rows()).toThrow(/Data/);
   });
 
   it("treats an out-of-range shared string as empty rather than crashing", async () => {

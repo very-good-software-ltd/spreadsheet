@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Row } from "../src/xlsx/row";
-import { Workbook } from "../src/xlsx/workbook";
+import type { Row } from "../src/row";
+import { Workbook } from "../src/workbook";
 import { type SheetInput, xlsx } from "./support/xlsx-fixture";
 
 async function rowsOf(sheet: SheetInput): Promise<Row[]> {
