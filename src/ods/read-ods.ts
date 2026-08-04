@@ -1,7 +1,7 @@
 import type { Cell, CellValue } from "../cell";
+import { readPart } from "../read-part";
 import { Row } from "../row";
 import type { WorkbookData, WorksheetInfo } from "../workbook";
-import { readPart } from "../xlsx/read-part";
 import { createXmlReader } from "../xml/create-xml-reader";
 import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";

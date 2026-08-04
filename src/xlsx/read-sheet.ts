@@ -1,9 +1,9 @@
 import type { Cell } from "../cell";
+import { readPart } from "../read-part";
 import { Row } from "../row";
 import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
 import { type CellContext, interpretCellValue } from "./interpret-cell";
-import { readPart } from "./read-part";
 
 const Element = {
   Row: "row",

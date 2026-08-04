@@ -1,6 +1,6 @@
+import { readPart } from "../read-part";
 import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
-import { readPart } from "./read-part";
 
 const STYLES_PART = "xl/styles.xml";
 

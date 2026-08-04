@@ -1,5 +1,6 @@
 import type { ResolvedValue } from "../cell";
-import { parseIsoDate, serialToDate } from "./date";
+import { parseIsoDate } from "../iso-date";
+import { serialToDate } from "./date";
 import type { Styles } from "./read-styles";
 
 const CellTypeCode = {

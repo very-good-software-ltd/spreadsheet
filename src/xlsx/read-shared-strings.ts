@@ -1,6 +1,6 @@
+import { readPart } from "../read-part";
 import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
-import { readPart } from "./read-part";
 
 const SHARED_STRINGS_PART = "xl/sharedStrings.xml";
 

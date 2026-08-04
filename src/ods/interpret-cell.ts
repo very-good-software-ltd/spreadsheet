@@ -1,5 +1,5 @@
 import type { CellValue, ResolvedValue } from "../cell";
-import { parseIsoDate } from "../xlsx/date";
+import { parseIsoDate } from "../iso-date";
 
 const Attribute = {
   ValueType: "office:value-type",
