@@ -6,6 +6,7 @@
     "moduleResolution": "bundler",
     "moduleDetection": "force",
     "types": ["node"],
+    "paths": { "very-good-spreadsheet": ["./src/index.ts"] },
 
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
@@ -26,5 +27,5 @@
 
     "noEmit": true
   },
-  "include": ["src", "test", "vite.config.ts"]
+  "include": ["src", "test", "examples", "vite.config.ts"]
 }
