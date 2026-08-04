@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 
 const FILES_DIR = "benchmark/files";
 // Each library in every mode it supports. stream is the bounded-memory path;
-// load materializes everything. SheetJS has no streaming read.
+// load materializes everything. SheetJS has no streaming read, and exceljs reads
+// xlsx only, so it is skipped for .ods files.
 const RUNS = [
   ["very-good-spreadsheet", "stream"],
   ["very-good-spreadsheet", "load"],
@@ -18,6 +19,10 @@ const RUNS = [
   ["exceljs", "load"],
   ["xlsx", "load"],
 ];
+
+function runsFor(file) {
+  return file.endsWith(".ods") ? RUNS.filter(([library]) => library !== "exceljs") : RUNS;
+}
 const worker = fileURLToPath(new URL("./read-file.mjs", import.meta.url));
 
 const args = process.argv.slice(2);
@@ -33,11 +38,13 @@ function discoverFiles() {
   } catch {
     return [];
   }
-  return names.filter((name) => name.endsWith(".xlsx") && !name.startsWith("_")).map((name) => `${FILES_DIR}/${name}`);
+  return names
+    .filter((name) => (name.endsWith(".xlsx") || name.endsWith(".ods")) && !name.startsWith("_"))
+    .map((name) => `${FILES_DIR}/${name}`);
 }
 
 if (targets.length === 0) {
-  console.log(`No .xlsx files in ${FILES_DIR}. Add some there, or pass file paths as arguments.`);
+  console.log(`No .xlsx or .ods files in ${FILES_DIR}. Add some there, or pass file paths as arguments.`);
   process.exit(0);
 }
 
@@ -48,7 +55,15 @@ function run(library, mode, file) {
     return { ok: true, ...JSON.parse(result.stdout.trim().split("\n").at(-1)) };
   }
   const ranOutOfMemory = /heap out of memory/i.test(result.stderr) || result.signal === "SIGABRT";
-  return { ok: false, status: ranOutOfMemory ? "out of memory" : `failed (${result.signal ?? result.status})` };
+  if (ranOutOfMemory) {
+    return { ok: false, status: "out of memory" };
+  }
+  return { ok: false, status: "failed", reason: errorReason(result.stderr) };
+}
+
+function errorReason(stderr) {
+  const match = stderr.match(/^\s*(?:[A-Z]\w*Error|Error): .*/m);
+  return (match ? match[0] : (stderr.trim().split("\n").at(-1) ?? "")).trim();
 }
 
 function pad(value, width) {
@@ -64,7 +79,7 @@ for (const file of targets) {
   console.log(
     `  ${pad("library", 24)} ${pad("mode", 7)} ${padStart("cells", 10)} ${padStart("time", 9)} ${padStart("peak RSS", 10)}`,
   );
-  for (const [library, mode] of RUNS) {
+  for (const [library, mode] of runsFor(file)) {
     const outcome = run(library, mode, file);
     const label = `  ${pad(library, 24)} ${pad(mode, 7)}`;
     if (outcome.ok) {
@@ -73,6 +88,9 @@ for (const file of targets) {
       );
     } else {
       console.log(`${label} ${padStart(outcome.status, 31)}`);
+      if (outcome.reason) {
+        console.log(`  ${outcome.reason}`);
+      }
     }
   }
 }
