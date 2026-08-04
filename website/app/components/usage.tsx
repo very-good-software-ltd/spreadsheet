@@ -1,13 +1,4 @@
-const CODE = `import { readFile } from "node:fs/promises";
-import { Workbook } from "very-good-spreadsheet";
-
-const workbook = await Workbook.open(await readFile("data.xlsx"));
-
-for await (const row of workbook.worksheet("Sheet1").rows()) {
-  for (const cell of row.cells) {
-    console.log(cell.ref, cell.type, cell.value);
-  }
-}`;
+import readNode from "../../../examples/read-node.ts?raw";
 
 export function Usage() {
   return (
@@ -20,7 +11,7 @@ export function Usage() {
           reads it in ranges instead of loading it all.
         </p>
         <pre className="mt-6 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm dark:border-gray-800 dark:bg-gray-900">
-          <code>{CODE}</code>
+          <code>{readNode.trimEnd()}</code>
         </pre>
       </div>
     </section>
