@@ -25,13 +25,13 @@
   ],
   "scripts": {
     "benchmark": "npm run build && node benchmark/run.mjs",
-    "build": "vite build",
+    "build": "vite build && tsc -p tsconfig.build.json",
     "examples": "node scripts/sync-examples.mjs",
     "examples:check": "node scripts/sync-examples.mjs --check",
     "lint": "biome check --error-on-warnings",
     "lint:fix": "biome check --write",
     "test": "vitest",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc",
     "verify": "npm run lint && npm run typecheck && npm run examples:check && npm run test"
   },
   "engines": {
@@ -43,11 +43,9 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.6",
     "@types/node": "^24.0.0",
-    "@typescript/typescript6": "^6.0.2",
     "exceljs": "^4.4.0",
     "fflate": "^0.8.3",
     "typescript": "^7.0.2",
-    "unplugin-dts": "^1.0.3",
     "vite": "^8.2.0",
     "vitest": "^4.1.10",
     "xlsx": "^0.18.5"

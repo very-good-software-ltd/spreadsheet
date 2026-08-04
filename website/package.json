@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "react-router build",
-    "dev": "react-router dev",
+    "dev": "react-router dev --host",
     "lint": "biome check --error-on-warnings",
     "lint:ci": "biome ci --error-on-warnings",
     "lint:fix": "biome check --write",

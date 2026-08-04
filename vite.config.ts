@@ -1,7 +1,6 @@
-import dts from "unplugin-dts/vite";
 import { defineConfig } from "vitest/config";
 
-export default defineConfig(({ command }) => ({
+export default defineConfig({
   build: {
     lib: {
       entry: "src/index.ts",
@@ -12,11 +11,9 @@ export default defineConfig(({ command }) => ({
       external: ["fflate", "saxes", /^node:/],
     },
   },
-  // No need to use this plugin when running tests
-  plugins: command === "build" ? [dts({ include: ["src"] })] : [],
   test: {
     include: ["test/**/*.test.ts"],
     watch: false,
     environment: "node",
   },
-}));
+});
