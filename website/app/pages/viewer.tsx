@@ -126,10 +126,10 @@ export function Demo() {
     >
       <div className="flex flex-wrap items-center gap-4">
         <label className="cursor-pointer rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">
-          Choose .xlsx
+          Choose .xlsx or .ods
           <input
             type="file"
-            accept=".xlsx"
+            accept=".xlsx,.ods"
             className="hidden"
             onChange={(event) => handleFile(event.target.files?.[0])}
           />
@@ -179,7 +179,7 @@ export function Demo() {
       >
         {displayedCount === 0 ? (
           <div className="flex h-full items-center justify-center p-8 text-center font-sans text-sm text-gray-400">
-            {status === "reading" ? "Reading…" : "Drop an .xlsx here or choose a file above."}
+            {status === "reading" ? "Reading…" : "Drop an .xlsx or .ods here or choose a file above."}
           </div>
         ) : (
           <div style={{ width: gridWidth }}>

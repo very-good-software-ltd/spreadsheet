@@ -6,6 +6,6 @@ describe("Demo", () => {
   it("prompts for a file before one is chosen", () => {
     render(<Demo />);
 
-    expect(screen.getByText("Drop an .xlsx here or choose a file above.")).toBeInTheDocument();
+    expect(screen.getByText("Drop an .xlsx or .ods here or choose a file above.")).toBeInTheDocument();
   });
 });
