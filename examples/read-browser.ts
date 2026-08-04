@@ -1,4 +1,4 @@
-import { Workbook } from "very-good-spreadsheet";
+import { Workbook } from "@very-good-software/spreadsheet";
 
 // A File from an <input type="file"> is a seekable Blob, so this reads it in
 // ranges off disk instead of loading the whole file into memory first.

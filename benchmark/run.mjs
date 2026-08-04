@@ -13,8 +13,8 @@ const FILES_DIR = "benchmark/files";
 // load materializes everything. SheetJS has no streaming read, and exceljs reads
 // xlsx only, so it is skipped for .ods files.
 const RUNS = [
-  ["very-good-spreadsheet", "stream"],
-  ["very-good-spreadsheet", "load"],
+  ["@very-good-software/spreadsheet", "stream"],
+  ["@very-good-software/spreadsheet", "load"],
   ["exceljs", "stream"],
   ["exceljs", "load"],
   ["xlsx", "load"],
@@ -77,11 +77,11 @@ function padStart(value, width) {
 for (const file of targets) {
   console.log(`\n${file}${cap ? `  (heap cap ${cap}MB)` : ""}`);
   console.log(
-    `  ${pad("library", 24)} ${pad("mode", 7)} ${padStart("cells", 10)} ${padStart("time", 9)} ${padStart("peak RSS", 10)}`,
+    `  ${pad("library", 35)} ${pad("mode", 7)} ${padStart("cells", 10)} ${padStart("time", 9)} ${padStart("peak RSS", 10)}`,
   );
   for (const [library, mode] of runsFor(file)) {
     const outcome = run(library, mode, file);
-    const label = `  ${pad(library, 24)} ${pad(mode, 7)}`;
+    const label = `  ${pad(library, 35)} ${pad(mode, 7)}`;
     if (outcome.ok) {
       console.log(
         `${label} ${padStart(outcome.cells, 10)} ${padStart(`${(outcome.ms / 1000).toFixed(1)}s`, 9)} ${padStart(`${outcome.rssMb.toFixed(0)}MB`, 10)}`,

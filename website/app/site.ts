@@ -1,5 +1,5 @@
 export const REPO_URL = "https://github.com/christophgockel/very-good-spreadsheet";
-export const NPM_INSTALL = "npm install very-good-spreadsheet";
+export const NPM_INSTALL = "npm install @very-good-software/spreadsheet";
 
 export interface Feature {
   readonly title: string;
@@ -40,7 +40,7 @@ export interface BenchmarkRow {
 // Reading every cell of a 28 MB file whose single sheet is 170 MB uncompressed
 // (4.44M cells), each library in its own Node process. Reproduce with `npm run benchmark`.
 export const BENCHMARK: readonly BenchmarkRow[] = [
-  { library: "very-good-spreadsheet", mode: "streaming", timeSeconds: 3.4, peakMemoryMb: 145, us: true },
+  { library: "@very-good-software/spreadsheet", mode: "streaming", timeSeconds: 3.4, peakMemoryMb: 145, us: true },
   { library: "exceljs", mode: "streaming", timeSeconds: 4.3, peakMemoryMb: 219 },
   { library: "SheetJS (xlsx)", mode: "loading", timeSeconds: 8.3, peakMemoryMb: 1503 },
   { library: "exceljs", mode: "loading", timeSeconds: 10.2, peakMemoryMb: 2756 },

@@ -1,4 +1,4 @@
-import type { Cell } from "very-good-spreadsheet";
+import type { Cell } from "@very-good-software/spreadsheet";
 
 // Matching on a cell's type gives you a type-safe way to access its value.
 export function show(cell: Cell): void {

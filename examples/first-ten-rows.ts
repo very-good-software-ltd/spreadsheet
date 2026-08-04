@@ -1,4 +1,4 @@
-import type { Row, Worksheet } from "very-good-spreadsheet";
+import type { Row, Worksheet } from "@very-good-software/spreadsheet";
 
 // There is no take or limit on purpose. rows() is a stream, so breaking the loop
 // stops the reading, and only the first ten rows of a huge file are ever parsed.

@@ -6,7 +6,7 @@
     "moduleResolution": "bundler",
     "moduleDetection": "force",
     "types": ["node"],
-    "paths": { "very-good-spreadsheet": ["./src/index.ts"] },
+    "paths": { "@very-good-software/spreadsheet": ["./src/index.ts"] },
 
     "verbatimModuleSyntax": true,
     "isolatedModules": true,

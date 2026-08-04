@@ -1,4 +1,4 @@
-import type { Cell } from "very-good-spreadsheet";
+import type { Cell } from "@very-good-software/spreadsheet";
 
 export function columnLetter(index: number): string {
   let n = index;

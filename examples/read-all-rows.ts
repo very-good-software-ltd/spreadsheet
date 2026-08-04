@@ -1,4 +1,4 @@
-import type { Row, Workbook } from "very-good-spreadsheet";
+import type { Row, Workbook } from "@very-good-software/spreadsheet";
 
 // There is no built-in "read everything" on purpose.
 // Streaming keeps memory low by default, and holding the whole workbook

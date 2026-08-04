@@ -27,7 +27,7 @@
     "react-dom": "^19.2.8",
     "react-router": "^8.3.0",
     "react-shiki": "^0.11.0",
-    "very-good-spreadsheet": "file:.."
+    "@very-good-software/spreadsheet": "file:.."
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.5",

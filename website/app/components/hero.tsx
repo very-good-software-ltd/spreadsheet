@@ -5,7 +5,7 @@ export function Hero() {
   return (
     <section className="px-6 pt-20 pb-16 text-center">
       <div className="mx-auto max-w-3xl">
-        <h1 className="font-mono text-3xl font-bold tracking-tight sm:text-4xl">very-good-spreadsheet</h1>
+        <h1 className="font-mono text-3xl font-bold tracking-tight sm:text-4xl">@very-good-software/spreadsheet</h1>
         <p className="mt-5 text-lg text-gray-600 dark:text-gray-300">
           Read Excel <code className="font-mono">.xlsx</code> files in Node and the browser, without holding the whole
           sheet in memory.

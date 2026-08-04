@@ -1,4 +1,4 @@
-import type { Cell } from "very-good-spreadsheet";
+import type { Cell } from "@very-good-software/spreadsheet";
 import { describe, expect, it } from "vitest";
 import { columnLetter, formatBytes, formatCell, formatDate } from "~/lib/format";
 

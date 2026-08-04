@@ -1,7 +1,7 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRef, useState } from "react";
-import type { Row } from "very-good-spreadsheet";
-import { Workbook } from "very-good-spreadsheet";
+import type { Row } from "@very-good-software/spreadsheet";
+import { Workbook } from "@very-good-software/spreadsheet";
 import { columnLetter, formatBytes, formatCell } from "~/lib/format";
 
 const DISPLAY_CAP = 100_000;

@@ -14,7 +14,7 @@ async function importDefault(specifier) {
 }
 
 const runners = {
-  "very-good-spreadsheet": {
+  "@very-good-software/spreadsheet": {
     async stream(file) {
       const { Workbook } = await importDefault("../dist/index.js");
       const workbook = await Workbook.open(readFileSync(file));

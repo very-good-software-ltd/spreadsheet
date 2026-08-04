@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { Workbook } from "very-good-spreadsheet";
+import { Workbook } from "@very-good-software/spreadsheet";
 
 const workbook = await Workbook.open(await readFile("data.xlsx"));
 

@@ -2,7 +2,7 @@ import { LandingPage } from "~/pages/landing";
 
 export function meta() {
   return [
-    { title: "very-good-spreadsheet" },
+    { title: "@very-good-software/spreadsheet" },
     {
       name: "description",
       content: "Read Excel .xlsx files in Node and the browser, without holding the whole sheet in memory.",
