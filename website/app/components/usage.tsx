@@ -1,3 +1,4 @@
+import { SyntaxHighlight } from "~/lib/syntax-highlight";
 import readNode from "../../../examples/read-node.ts?raw";
 
 export function Usage() {
@@ -10,8 +11,8 @@ export function Usage() {
           <code className="font-mono">File</code> straight to <code className="font-mono">Workbook.open</code>, which
           reads it in ranges instead of loading it all.
         </p>
-        <pre className="mt-6 overflow-x-auto rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm dark:border-gray-800 dark:bg-gray-900">
-          <code>{readNode.trimEnd()}</code>
+        <pre className="mt-6 rounded-lg border font-mono text-sm border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900">
+          <SyntaxHighlight>{readNode.trimEnd()}</SyntaxHighlight>
         </pre>
       </div>
     </section>

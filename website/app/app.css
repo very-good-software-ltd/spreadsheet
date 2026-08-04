@@ -6,6 +6,25 @@
     "Noto Color Emoji";
 }
 
+@media (prefers-color-scheme: dark) {
+  /* Shiki dual themes: swap the token colours to the dark theme, but keep the
+     background transparent so the surrounding card's colour shows through. The
+     .shiki pre carries the inline background, so it must be in the selector. */
+  .shiki,
+  .shiki span {
+    /* biome-ignore lint/complexity/noImportantStyles: shiki writes inline styles, this is the only override. */
+    color: var(--shiki-dark) !important;
+    /* biome-ignore lint/complexity/noImportantStyles: shiki writes inline styles, this is the only override. */
+    background-color: transparent !important;
+    /* biome-ignore lint/complexity/noImportantStyles: shiki writes inline styles, this is the only override. */
+    font-style: var(--shiki-dark-font-style) !important;
+    /* biome-ignore lint/complexity/noImportantStyles: shiki writes inline styles, this is the only override. */
+    font-weight: var(--shiki-dark-font-weight) !important;
+    /* biome-ignore lint/complexity/noImportantStyles: shiki writes inline styles, this is the only override. */
+    text-decoration: var(--shiki-dark-text-decoration) !important;
+  }
+}
+
 html,
 body {
   @apply bg-white dark:bg-gray-950;
