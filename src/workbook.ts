@@ -1,8 +1,8 @@
 import { toByteRange } from "./io/byte-range";
 import type { BinarySource } from "./io/source";
+import { readSpreadsheet } from "./read-spreadsheet";
 import type { Row } from "./row";
 import { Worksheet } from "./worksheet";
-import { readXlsx } from "./xlsx/read-xlsx";
 
 // A whole-bytes input, held in memory, or a seekable Blob, a File in the browser
 // or an fs.openAsBlob handle in Node, read in ranges so the file is never fully
@@ -23,7 +23,7 @@ export interface WorkbookData {
 
 export class Workbook {
   static async open(source: WorkbookSource): Promise<Workbook> {
-    return new Workbook(await readXlsx(await toByteRange(source)));
+    return new Workbook(await readSpreadsheet(await toByteRange(source)));
   }
 
   constructor(private readonly data: WorkbookData) {}
