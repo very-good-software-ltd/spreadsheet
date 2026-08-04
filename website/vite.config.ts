@@ -3,15 +3,8 @@ import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  environments: {
-    ssr: {
-      build: {
-        rolldownOptions: {
-          input: "./server/app.ts",
-        },
-      },
-    },
-  },
+  server: { port: 8080 },
+  preview: { port: 8080 },
   plugins: [
     tailwindcss(),
     // React Router doesn't play nicely with vitest, so we skip it when running tests.

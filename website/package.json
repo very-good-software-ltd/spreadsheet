@@ -4,13 +4,13 @@
   "type": "module",
   "scripts": {
     "build": "react-router build",
-    "dev": "cross-env NODE_ENV=development node --conditions development server.js",
+    "dev": "react-router dev",
     "lint": "biome check --error-on-warnings",
     "lint:ci": "biome ci --error-on-warnings",
     "lint:fix": "biome check --write",
     "lint:routes": "react-router-lint-routes --tsconfig tsconfig.vite.json",
-    "lint:verify": "npm run lint && npm run lint:routes",
-    "start": "node server.js",
+    "lint:verify": "npm run lint",
+    "preview": "vite preview --outDir build/client",
     "test": "vitest",
     "typecheck": "react-router typegen && tsc -b",
     "verify": "npm run lint:verify && npm run typecheck && npm run test"
