@@ -10,6 +10,7 @@ const Element = {
   Cell: "c",
   Value: "v",
   Text: "t",
+  Formula: "f",
 } as const;
 
 const Attribute = {
@@ -30,7 +31,9 @@ export async function* readSheetRows(
   let cellTypeCode = "";
   let cellStyleIndex: number | undefined;
   let valueText: string | null = null;
+  let formulaText: string | null = null;
   let capturing = false;
+  let capturingFormula = false;
 
   for await (const batch of readPart(archive, xml, path)) {
     for (const event of batch) {
@@ -44,23 +47,44 @@ export async function* readSheetRows(
             cellTypeCode = event.attributes[Attribute.Type] ?? "";
             cellStyleIndex = styleIndexOf(event.attributes[Attribute.Style]);
             valueText = null;
+            formulaText = null;
+          } else if (event.name === Element.Formula) {
+            capturingFormula = true;
+            formulaText ??= "";
           } else if (event.name === Element.Value || event.name === Element.Text) {
             capturing = true;
             valueText ??= "";
           }
           break;
         case "text":
-          if (capturing && valueText !== null) {
+          if (capturingFormula && formulaText !== null) {
+            formulaText += event.text;
+          } else if (capturing && valueText !== null) {
             valueText += event.text;
           }
           break;
         case "close":
-          if (event.name === Element.Value || event.name === Element.Text) {
+          if (event.name === Element.Formula) {
+            capturingFormula = false;
+          } else if (event.name === Element.Value || event.name === Element.Text) {
             capturing = false;
           } else if (event.name === Element.Cell) {
-            if (valueText !== null) {
-              const value = interpretCellValue(cellRef, cellTypeCode, cellStyleIndex, valueText, context);
-              cells.push({ ref: cellRef, columnIndex: columnIndexOf(cellRef), ...value });
+            const cached =
+              valueText === null ? null : interpretCellValue(cellRef, cellTypeCode, cellStyleIndex, valueText, context);
+            // A formula cell keeps its text and Excel's cached result. The text
+            // is taken as stored, without a leading "=", and a shared-formula
+            // dependent carries none, so its value is empty. A formula with no
+            // cached <v> keeps a null cachedValue rather than being dropped.
+            if (formulaText !== null) {
+              cells.push({
+                ref: cellRef,
+                columnIndex: columnIndexOf(cellRef),
+                type: "formula",
+                value: formulaText,
+                cachedValue: cached,
+              });
+            } else if (cached !== null) {
+              cells.push({ ref: cellRef, columnIndex: columnIndexOf(cellRef), ...cached });
             }
           } else if (event.name === Element.Row) {
             yield new Row(rowNumber, cells);

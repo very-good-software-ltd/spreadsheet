@@ -79,12 +79,14 @@ describe("reading exceljs-written workbooks", () => {
     expect(rows[0]?.cells).toEqual([{ ref: "A1", columnIndex: 0, type: "date", value: date }]);
   });
 
-  it("reads a formula cell as its cached result", async () => {
+  it("reads a formula cell with its text and cached result", async () => {
     const rows = await readWith((workbook) => {
       workbook.addWorksheet("Data").getCell("A1").value = { formula: "2*5", result: 10 };
     }, "Data");
 
-    expect(rows[0]?.cells).toEqual([{ ref: "A1", columnIndex: 0, type: "number", value: 10 }]);
+    expect(rows[0]?.cells).toEqual([
+      { ref: "A1", columnIndex: 0, type: "formula", value: "2*5", cachedValue: { type: "number", value: 10 } },
+    ]);
   });
 
   it("reports a hidden sheet as hidden", async () => {

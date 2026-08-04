@@ -63,6 +63,33 @@ describe("Worksheet rows", () => {
     ]);
   });
 
+  it("reads a formula cell as its text and cached value", async () => {
+    const [row] = await rowsOf({
+      name: "Data",
+      rows: [[{ formula: "B1+C1", cached: 5 }, 2, 3]],
+    });
+
+    expect(row?.cells[0]).toEqual({
+      ref: "A1",
+      columnIndex: 0,
+      type: "formula",
+      value: "B1+C1",
+      cachedValue: { type: "number", value: 5 },
+    });
+  });
+
+  it("keeps a formula cell that has no cached value", async () => {
+    const [row] = await rowsOf({
+      name: "Data",
+      rows: [[{ formula: "SUM(B1:B3)" }, "after"]],
+    });
+
+    expect(row?.cells).toEqual([
+      { ref: "A1", columnIndex: 0, type: "formula", value: "SUM(B1:B3)", cachedValue: null },
+      { ref: "B1", columnIndex: 1, type: "string", value: "after" },
+    ]);
+  });
+
   it("reads a styled number as a date", async () => {
     const date = new Date(Date.UTC(2020, 0, 15));
 

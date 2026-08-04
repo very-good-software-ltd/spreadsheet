@@ -15,6 +15,10 @@ export function show(cell: Cell): void {
     case "date":
       console.log("date, in UTC", cell.value);
       break;
+    case "formula":
+      // value is the formula text, cachedValue is the result Excel stored.
+      console.log("formula", cell.value, cell.cachedValue?.value);
+      break;
     case "error":
       console.log("error text", cell.value);
       break;

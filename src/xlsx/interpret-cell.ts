@@ -1,4 +1,4 @@
-import type { CellValue } from "../cell";
+import type { ResolvedValue } from "../cell";
 import { parseIsoDate, serialToDate } from "./date";
 import type { Styles } from "./read-styles";
 
@@ -24,7 +24,7 @@ export function interpretCellValue(
   styleIndex: number | undefined,
   text: string,
   context: CellContext,
-): CellValue {
+): ResolvedValue {
   // An absent t attribute means a number cell.
   const code = typeCode === "" ? CellTypeCode.Number : typeCode;
 

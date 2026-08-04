@@ -8,6 +8,7 @@ type CellInput =
   | { readonly error: string }
   | { readonly inlineString: string }
   | { readonly formulaString: string }
+  | { readonly formula: string; readonly cached?: number }
   | { readonly isoDate: string }
   | { readonly rawType: string };
 
@@ -58,6 +59,10 @@ export function xlsx(sheets: readonly SheetInput[], options: WorkbookOptions = {
     }
     if ("formulaString" in value) {
       return `<c r="${ref}" t="str"><v>${value.formulaString}</v></c>`;
+    }
+    if ("formula" in value) {
+      const cached = value.cached === undefined ? "" : `<v>${value.cached}</v>`;
+      return `<c r="${ref}"><f>${value.formula}</f>${cached}</c>`;
     }
     if ("isoDate" in value) {
       return `<c r="${ref}" t="d"><v>${value.isoDate}</v></c>`;
