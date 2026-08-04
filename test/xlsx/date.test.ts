@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { serialToDate } from "../src/xlsx/date";
+import { serialToDate } from "../../src/xlsx/date";
 
 describe("serialToDate", () => {
   it("maps 1900-system serials, including dates before the phantom leap day", () => {

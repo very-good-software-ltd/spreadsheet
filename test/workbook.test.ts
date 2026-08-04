@@ -83,13 +83,13 @@ describe("Workbook", () => {
   });
 
   it("rejects bytes that are not a zip at all", async () => {
-    await expect(Workbook.open(new Uint8Array([1, 2, 3, 4, 5]))).rejects.toThrow(/not a valid xlsx/i);
+    await expect(Workbook.open(new Uint8Array([1, 2, 3, 4, 5]))).rejects.toThrow(/not a valid spreadsheet/i);
   });
 
-  it("rejects a zip that has no workbook part", async () => {
+  it("rejects a zip that is neither xlsx nor ods", async () => {
     const bytes = zipSync({ "hello.txt": strToU8("hi") });
 
-    await expect(Workbook.open(bytes)).rejects.toThrow(/missing xl\/workbook\.xml/i);
+    await expect(Workbook.open(bytes)).rejects.toThrow(/not an xlsx or ods/i);
   });
 
   it("names the worksheet when its data part is missing from the archive", async () => {

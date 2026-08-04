@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Row } from "../src/row";
-import { Workbook } from "../src/workbook";
-import { type SheetInput, xlsx } from "./support/xlsx-fixture";
+import type { Row } from "../../src/row";
+import { Workbook } from "../../src/workbook";
+import { type SheetInput, xlsx } from "../support/xlsx-fixture";
 
 async function rowsOf(sheet: SheetInput): Promise<Row[]> {
   const workbook = await Workbook.open(xlsx([sheet]));
