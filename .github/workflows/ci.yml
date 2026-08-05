@@ -28,6 +28,17 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
 
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run examples:check
+
   test:
     runs-on: ubuntu-latest
     steps:
