@@ -2,7 +2,8 @@
 
 Read Excel `.xlsx` and OpenDocument `.ods` spreadsheets in Node and the browser, without holding the whole sheet in memory.
 
-**[Try it live](https://spreadsheet.verygoodsoftware.net)**. Drop in an `.xlsx` or `.ods` and watch it stream in your browser.
+**[Try it live](https://spreadsheet.verygoodsoftware.net)**.
+Drop in an `.xlsx` or `.ods` and watch it stream in your browser.
 
 [npm](https://www.npmjs.com/package/@very-good-software/spreadsheet) | [GitHub](https://github.com/christophgockel/very-good-spreadsheet)
 
