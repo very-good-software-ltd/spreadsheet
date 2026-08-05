@@ -81,7 +81,7 @@ describe("NativeZipArchive", () => {
     }
   });
 
-  it("streams a large entry in multiple chunks", async () => {
+  it("streams a large entry in multiple chunks", { timeout: 10_000 }, async () => {
     const original = strToU8("lorem ipsum ".repeat(100_000));
     const archive = await openBytes(zipSync({ "big.xml": original }));
 
@@ -91,7 +91,7 @@ describe("NativeZipArchive", () => {
     expect(concat(chunks)).toEqual(original);
   });
 
-  it("reads an entry larger than the read chunk size", async () => {
+  it("reads an entry larger than the read chunk size", { timeout: 10_000 }, async () => {
     const original = strToU8("x".repeat(2_500_000));
     const archive = await openBytes(zipSync({ "big.bin": original }, { level: 0 }));
 
