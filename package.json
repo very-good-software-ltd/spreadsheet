@@ -34,6 +34,7 @@
     "examples:check": "node scripts/sync-examples.mjs --check",
     "lint": "biome check --error-on-warnings",
     "lint:fix": "biome check --write",
+    "prepublishOnly": "npm run build",
     "test": "vitest",
     "typecheck": "tsc",
     "verify": "npm run lint && npm run typecheck && npm run examples:check && npm run test"
