@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-05
+
 ### Added
 
 - Read Excel `.xlsx` and OpenDocument `.ods` spreadsheets, with `Workbook.open` picking the format from the file.
@@ -19,3 +21,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Read a row's cells by column with `row.cell(index)`, each cell carrying a zero-based `columnIndex` and an `"A1"` style `ref`.
 - List sheets with `workbook.worksheets`, including whether each one is hidden.
 - Ship TypeScript types and an ES module.
+
+[0.1.0]: https://github.com/christophgockel/very-good-spreadsheet/releases/tag/0.1.0
