@@ -5,7 +5,8 @@ export function meta() {
     { title: "@very-good-software/spreadsheet" },
     {
       name: "description",
-      content: "Read Excel .xlsx files in Node and the browser, without holding the whole sheet in memory.",
+      content:
+        "Read Excel .xlsx and OpenDocument .ods files in Node and the browser, without holding the whole sheet in memory.",
     },
   ];
 }

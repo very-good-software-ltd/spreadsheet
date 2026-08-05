@@ -1,14 +1,20 @@
 import { InstallCommand } from "~/components/install-command";
-import { REPO_URL } from "~/site";
+import { NPM_URL, REPO_URL } from "~/site";
 
 export function Hero() {
   return (
     <section className="px-6 pt-20 pb-16 text-center">
       <div className="mx-auto max-w-3xl">
-        <h1 className="font-mono text-3xl font-bold tracking-tight sm:text-4xl">@very-good-software/spreadsheet</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-balance sm:text-5xl">
+          Try out a{" "}
+          <span className="bg-linear-to-r from-emerald-500 via-teal-500 to-cyan-500 bg-clip-text text-transparent dark:from-emerald-400 dark:via-teal-400 dark:to-cyan-400">
+            Very Good
+          </span>{" "}
+          Spreadsheet reader
+        </h1>
         <p className="mt-5 text-lg text-gray-600 dark:text-gray-300">
-          Read Excel <code className="font-mono">.xlsx</code> files in Node and the browser, without holding the whole
-          sheet in memory.
+          Streams <code className="font-mono">.xlsx</code> and <code className="font-mono">.ods</code> in Node and the
+          browser. Pick a file below and watch it read, however big it is.
         </p>
         <div className="mt-8 flex flex-col items-center gap-4">
           <InstallCommand />
@@ -20,6 +26,14 @@ export function Hero() {
               className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300"
             >
               GitHub
+            </a>
+            <a
+              href={NPM_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 dark:bg-gray-100 dark:text-gray-900 dark:hover:bg-gray-300"
+            >
+              npm
             </a>
             <a
               href="#demo"

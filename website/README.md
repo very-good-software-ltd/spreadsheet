@@ -10,6 +10,7 @@ Install the dependencies:
 npm install
 ```
 
+
 ### Development
 
 Start the development server:
@@ -19,6 +20,7 @@ npm run dev
 ```
 
 Your application will be available at `http://localhost:8080`.
+
 
 ## Scripts
 
@@ -38,6 +40,7 @@ Run any of these with `npm run <name>`.
 | `lint:verify` | Run `lint` and `lint:routes` together. |
 | `verify` | Run `lint:verify`, `typecheck` and `test`. Use this before pushing. |
 
+
 ## Building for Production
 
 Create a production build:
@@ -45,6 +48,7 @@ Create a production build:
 ```bash
 npm run build
 ```
+
 
 ## Deployment
 
