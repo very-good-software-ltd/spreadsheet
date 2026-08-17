@@ -1,4 +1,5 @@
 import type { Cell, CellValue } from "../cell";
+import { cellReference } from "../cell-reference";
 import { readPart } from "../read-part";
 import { Row } from "../row";
 import type { WorkbookData, WorksheetInfo } from "../workbook";
@@ -146,7 +147,7 @@ function materialise(
   row: number,
 ): Cell[] {
   return partials.map((partial) => ({
-    ref: `${columnLetter(partial.columnIndex)}${row}`,
+    ref: cellReference(row, partial.columnIndex),
     columnIndex: partial.columnIndex,
     ...partial.value,
   }));
@@ -154,14 +155,4 @@ function materialise(
 
 function repeatOf(attribute: string | undefined): number {
   return attribute === undefined ? 1 : Number(attribute);
-}
-
-function columnLetter(index: number): string {
-  let n = index;
-  let letters = "";
-  do {
-    letters = String.fromCharCode(65 + (n % 26)) + letters;
-    n = Math.floor(n / 26) - 1;
-  } while (n >= 0);
-  return letters;
 }

@@ -1,4 +1,5 @@
 import type { Cell } from "../cell";
+import { columnIndexOf } from "../cell-reference";
 import { readPart } from "../read-part";
 import { Row } from "../row";
 import type { XmlReader } from "../xml/xml-reader";
@@ -97,18 +98,4 @@ export async function* readSheetRows(
 
 function styleIndexOf(attribute: string | undefined): number | undefined {
   return attribute === undefined ? undefined : Number(attribute);
-}
-
-// A cell reference like "C1" starts with the column letters. Convert them from
-// base-26 (A=1) to a zero-based index, so "A" is 0 and "AA" is 26.
-function columnIndexOf(ref: string): number {
-  let index = 0;
-  for (const char of ref) {
-    const code = char.charCodeAt(0);
-    if (code < 65 || code > 90) {
-      break;
-    }
-    index = index * 26 + (code - 64);
-  }
-  return index - 1;
 }
