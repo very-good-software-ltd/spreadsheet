@@ -236,14 +236,14 @@ Deleting and renaming sheets is out, for the same reason inserting rows is: both
   Untouched entries are copied as bytes and are exactly identical, checksum and compressed size included, so nothing is recompressed.
   Five parts are rewritten: the edited sheets, `xl/styles.xml`, `xl/workbook.xml`, and, only when there was a calculation chain to drop, `[Content_Types].xml` and `xl/_rels/workbook.xml.rels`.
   A rewritten part is re-emitted from the XML event stream, which does not carry attribute order, self-closing tag spelling, comments or processing instructions. So it is semantically equivalent but not byte-identical, and the byte-identity test can only cover the parts we did not touch. Whether that gap ever matters is unknown.
-- **Recalculation and the zip's shape (checked in Excel in the browser, desktop still open).**
-  Four things we could not prove with a test are no longer guesses, all confirmed in Excel in the browser on 2026-08-17.
+- **Recalculation and the zip's shape (resolved).**
+  Four things we could not prove with a test are no longer guesses, all confirmed on 2026-08-17 in Excel in the browser and in desktop Excel.
   An entry described after its data is accepted, which is what lets a sheet be deflated as it streams rather than buffered.
   A sheet with no `dimension` element is accepted, which a single pass cannot emit correctly because the element precedes the rows it describes.
   `fullCalcOnLoad` makes Excel recompute a cached formula result that our edit made stale.
   And dropping `xl/calcChain.xml` along with its content type override and its relationship leaves nothing dangling.
   That last one took two passes. The first template had no calculation chain, because `exceljs` writes none even for a workbook with formulas, so the code that removes one never ran. `scripts/manual-check.mjs` now splices one in so the branch is reachable.
-  Still open: desktop Excel is a stricter implementation than the browser one and has not been tried. `npm run manual-check` builds the file to try it with.
+  Desktop Excel is the stricter of the two and agrees. So the design decisions that only Excel could settle are settled, and what remains is coverage rather than doubt: the generated template has no charts or pivot tables, so a real one is still worth a pass. `npm run manual-check` builds the file to try it with.
 - **What a written file does not update.**
   An Excel Table in the template does not grow to cover appended rows, and a chart pointing at a fixed range does not extend.
   A digitally signed workbook has its signature invalidated by any modification, which is inherent and not fixable.

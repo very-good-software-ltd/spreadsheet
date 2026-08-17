@@ -18,17 +18,18 @@ check, so run both if you can.
 
 ## What has been checked so far
 
-Excel in the browser, on 2026-08-17, opened a filled file with no repair prompt
-and every expectation on the Checks sheet held. Twice: once before the template
-carried a calculation chain and once after, so the path that removes one is
-covered too.
+Checked on 2026-08-17, in Excel in the browser and in desktop Excel. No repair
+prompt, every expectation on the Checks sheet held, and document properties came
+through with the author intact.
 
 That settles four things no test here can reach. An entry described after its
 data is accepted. A sheet with no `dimension` element is accepted. A stale cached
 formula result is recalculated. And removing the calculation chain leaves no
 dangling content type override or relationship behind.
 
-One gap left: desktop Excel is a stricter implementation and has not been tried.
+So the parts of the design that could only be confirmed by Excel are confirmed.
+What is still worth a pass before a release is a real template, since the
+generated one has no charts or pivot tables in it.
 
 
 ## Start here
