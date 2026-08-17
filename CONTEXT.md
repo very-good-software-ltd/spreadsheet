@@ -227,8 +227,9 @@ Deleting and renaming sheets is out, for the same reason inserting rows is: both
   The writer does not cause this, it makes it reachable. A format-neutral formula needs a parser that rewrites references and maps function names, which is a smaller job than the formula engine but still a real one.
   `formula()` exists as the boundary where that translation would go.
 - **How faithful is a rewritten part.**
-  Untouched entries are copied as bytes and are exactly identical. A part we rewrite is re-emitted from the XML event stream, which does not carry attribute order, self-closing tag spelling, comments or processing instructions.
-  So the rewritten sheet is semantically equivalent but not byte-identical, and the byte-identity test can only cover the parts we did not touch. Whether that gap ever matters is unknown.
+  Untouched entries are copied as bytes and are exactly identical, checksum and compressed size included, so nothing is recompressed.
+  Five parts are rewritten: the edited sheets, `xl/styles.xml`, `xl/workbook.xml`, and, only when there was a calculation chain to drop, `[Content_Types].xml` and `xl/_rels/workbook.xml.rels`.
+  A rewritten part is re-emitted from the XML event stream, which does not carry attribute order, self-closing tag spelling, comments or processing instructions. So it is semantically equivalent but not byte-identical, and the byte-identity test can only cover the parts we did not touch. Whether that gap ever matters is unknown.
 - **Recalculation on open needs confirming against real Excel.**
   Changing a value makes every cached formula result downstream of it stale.
   The plan is to drop `xl/calcChain.xml`, which is a cache Excel rebuilds, and set `fullCalcOnLoad` so Excel recomputes on open.
@@ -238,11 +239,10 @@ Deleting and renaming sheets is out, for the same reason inserting rows is: both
   An Excel Table in the template does not grow to cover appended rows, and a chart pointing at a fixed range does not extend.
   A digitally signed workbook has its signature invalidated by any modification, which is inherent and not fixable.
   A template whose data region sits above a totals block is not served: writing past the region overwrites the totals, and we cannot detect it because we do not know those rows are a totals block.
-- **Verifying the writer needs real files.**
-  The headline test is that every entry we did not edit is byte-identical to the source, since that is the promise stated mechanically.
-  `exceljs` and `xlsx` read the output back as independent checks, the same way they already back the read tests.
-  Neither catches Excel offering to repair a file, which is the failure that matters most, so that stays a manual check at release.
-  All of this needs real template files with genuine cruft in them, charts and merged cells and conditional formats. Files we generate ourselves would pass every test and prove nothing.
+- **Verifying the writer needs real files (partly done).**
+  In place: the byte-identity test in `test/xlsx/write-fidelity.test.ts` fills a file `exceljs` wrote and asserts every entry we did not rewrite comes out with the same checksum, compressed size and bytes, including the theme and document properties, which we have no reader for at all. `exceljs` and `xlsx` both read the output back. The loop is guarded by naming parts it must have checked, so it cannot pass by checking nothing.
+  Still missing: a real template with charts, pivot tables and conditional formatting. What `exceljs` writes has no part that exercises those, so the most valuable case is still unproven.
+  Excel offering to repair a file is the failure that matters most and no library round-trip catches it. That is a manual check, listed in `MANUAL-CHECKS.md`.
 - **Writing `.ods`.**
   Out of scope. It shares the zip and XML writing layers and nothing else, since the fidelity work is per format.
   It would also force the formula translation question above, because `formula()` cannot pass its text through untranslated.

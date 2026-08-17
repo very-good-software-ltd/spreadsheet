@@ -10,14 +10,13 @@ Drop in an `.xlsx` or `.ods` and watch it stream in your browser.
 This library reads a spreadsheet as a stream.
 It streams the rows and does not keep them, so the memory it uses stays low even for a very large sheet.
 The same code runs in Node and in the browser, because it uses only web standard features and nothing specific to Node.
-Reading is the only thing it does today.
-Writing is planned for later.
+It reads files, and it writes them: you can fill in a template or build a file from nothing, and everything you did not touch is copied across untouched.
 
 
 ## Why this library
 
-`xlsx` (SheetJS) and `exceljs` already read Excel files, and they've done it for years.
-If you need to write files, or read a format we don't, use them.
+`xlsx` (SheetJS) and `exceljs` already read and write Excel files, and they've done it for years.
+If you need a format we don't handle, use them.
 This isn't a pitch to rip them out.
 
 The thing is, they were written a long time ago.
@@ -32,8 +31,7 @@ The types come straight from the source.
 Memory stays flat as the file grows, because we read the sheet as a stream instead of loading the whole thing.
 
 There are a few catches.
-We only read for now, no writing yet.
-We handle `.xlsx` and `.ods` and nothing more exotic.
+We read `.xlsx` and `.ods` but only write `.xlsx`, and nothing more exotic than those.
 And we're new, so we haven't run into the years of odd files the older libraries have.
 If that's fine for what you're building, give it a try.
 
@@ -44,7 +42,7 @@ This is early.
 It reads `.xlsx`, the format Excel has used since 2007, and `.ods`, the OpenDocument spreadsheet format.
 `Workbook.open` picks the format from the file, so the same code reads both.
 It does not read the older `.xls` format or `.xlsb` yet.
-The reading API is usable and covers the common cell types.
+The reading API is usable and covers the common cell types, and writing covers `.xlsx`.
 Expect the API to still change.
 
 One `.ods` detail to know: a formula cell's `value` is the ODF formula text, which uses its own syntax, for example `of:=SUM([.B1:.B3])`.
@@ -276,6 +274,149 @@ export async function firstTenRows(sheet: Worksheet): Promise<Row[]> {
 ```
 
 <!-- /example -->
+
+
+## Writing a file
+
+Writing takes a workbook, collects your edits, and produces a new file.
+The input is never touched.
+
+Every part of the file you do not edit is copied across byte for byte.
+That means charts, pivot tables, drawings, macros and formatting survive, because we never look at them.
+This is the point of the whole design, and it is why filling a client's template works.
+
+### Filling a template
+
+<!-- example: write-fill-template.ts -->
+
+```ts
+import { createWriteStream, openAsBlob } from "node:fs";
+import { Writable } from "node:stream";
+import { Workbook } from "@very-good-software/spreadsheet";
+
+// Open a template, fill in the parts that change, and write a new file. The
+// template's own charts, formatting and formulas are copied across untouched.
+const workbook = await Workbook.open(await openAsBlob("template.xlsx"));
+const editor = workbook.edit();
+
+const invoice = editor.worksheet("Invoice");
+invoice.set("C3", "Acme Ltd");
+invoice.set("C4", new Date("2026-03-01"));
+
+invoice.writeRows(8, [
+  ["Consulting", 12, 950],
+  ["Expenses", 1, 240],
+]);
+
+await editor.save().pipeTo(Writable.toWeb(createWriteStream("invoice.xlsx")));
+```
+
+<!-- /example -->
+
+The cells you write keep whatever formatting they already had.
+`writeRows` writes over the rows at that position without pushing anything down, which suits a template with a pre-formatted data region waiting to be filled.
+
+### Starting from nothing
+
+There is no separate mode for building a file.
+`Workbook.create()` gives you an empty workbook, and everything after that line is identical.
+
+<!-- example: write-from-scratch.ts -->
+
+```ts
+import { createWriteStream } from "node:fs";
+import { Writable } from "node:stream";
+import { formula, Workbook } from "@very-good-software/spreadsheet";
+
+// Nothing to open, so start from an empty workbook. Everything after the first
+// line is the same as filling a template.
+const editor = (await Workbook.create()).edit();
+const sheet = editor.worksheet(0);
+
+sheet.appendRows([
+  ["Region", "Units"],
+  ["North", 120],
+  ["South", 340],
+]);
+sheet.set("A5", "Total");
+sheet.set("B5", formula("SUM(B2:B3)"));
+
+await editor.save().pipeTo(Writable.toWeb(createWriteStream("report.xlsx")));
+```
+
+<!-- /example -->
+
+### What you can put in a cell
+
+A number, a string, a boolean, a `Date`, `null`, or `formula(...)`.
+
+```ts
+sheet.set("A1", 42);
+sheet.set("A2", "text");
+sheet.set("A3", true);
+sheet.set("A4", new Date("2026-03-01"));
+sheet.set("A5", null); // blanks the cell and keeps its formatting
+sheet.set("A6", formula("SUM(A1:A4)"));
+```
+
+There is no error value.
+An error is something a formula produces, so write `formula("NA()")` rather than the text `#N/A`.
+
+A formula is written without its cached result, and the file asks the application to recalculate when it opens.
+So a total over cells you changed comes out right, rather than showing the number the template was saved with.
+
+One thing to watch with dates.
+A spreadsheet date has no timezone but a JavaScript `Date` is an instant, and we read it in UTC to match how the reader converts the other way.
+So `new Date("2026-03-01")` is what you want, and `new Date(2026, 2, 1)` builds local midnight, which west of UTC writes the previous day.
+
+### Big exports stay small in memory
+
+Rows are pulled as the output drains, not when you hand them over.
+So a generator streams and nothing is held.
+
+<!-- example: write-large-export.ts -->
+
+```ts
+import { createWriteStream } from "node:fs";
+import { Writable } from "node:stream";
+import { Workbook } from "@very-good-software/spreadsheet";
+
+// The rows are pulled as the output drains, so this holds one row at a time
+// however many there are.
+async function* everyOrder(): AsyncIterable<readonly [number, string, number]> {
+  for (let id = 1; id <= 5_000_000; id += 1) {
+    yield [id, `Order ${id}`, id * 1.5];
+  }
+}
+
+const editor = (await Workbook.create()).edit();
+editor.worksheet(0).appendRows(everyOrder());
+
+await editor.save().pipeTo(Writable.toWeb(createWriteStream("orders.xlsx")));
+```
+
+<!-- /example -->
+
+Because nothing is read until you save, an error inside your own generator surfaces from `save` rather than from `appendRows`.
+Everything we can check ourselves, a bad cell reference or an unknown sheet, throws at the call instead.
+
+`save()` returns a stream rather than bytes, so the output is never held either.
+The cost is that a failure part way through leaves an incomplete file with no undo.
+A zip is read from a directory at its end, so a truncated write is a file no reader will open rather than a subtly wrong spreadsheet.
+Saving twice throws, because your row sources have already been read and the second file would quietly be missing rows.
+
+
+## What it does not write
+
+- `.ods`. Only `.xlsx` can be written.
+- Inserting or deleting rows, and anything that shifts cells. Moving a row changes what every formula, merged range, conditional format and table range below it means, and getting that subtly wrong is worse than not offering it.
+- Deleting or renaming a sheet, for the same reason: both ripple into everything that refers to them.
+- Growing an Excel Table or a chart range to cover rows you appended.
+- Keeping a digital signature valid. Any change to a file invalidates it.
+
+One template shape is worth calling out.
+If the data region has a totals block underneath it, writing more rows than the region has room for overwrites that block.
+We cannot detect it, because nothing in the file says those rows are a totals block.
 
 
 ## Streaming and memory
