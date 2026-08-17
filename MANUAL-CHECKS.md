@@ -19,13 +19,16 @@ check, so run both if you can.
 ## What has been checked so far
 
 Excel in the browser, on 2026-08-17, opened a filled file with no repair prompt
-and every expectation on the Checks sheet held. That covers the three things we
-could not prove from a test: an entry described after its data is accepted, a
-sheet with no `dimension` element is accepted, and `fullCalcOnLoad` recalculates.
+and every expectation on the Checks sheet held. Twice: once before the template
+carried a calculation chain and once after, so the path that removes one is
+covered too.
 
-Two gaps remain. Desktop Excel has not been tried. And the run predates the
-template carrying a calculation chain, so the path that drops one has been
-exercised only since. Both want one more pass.
+That settles four things no test here can reach. An entry described after its
+data is accepted. A sheet with no `dimension` element is accepted. A stale cached
+formula result is recalculated. And removing the calculation chain leaves no
+dangling content type override or relationship behind.
+
+One gap left: desktop Excel is a stricter implementation and has not been tried.
 
 
 ## Start here

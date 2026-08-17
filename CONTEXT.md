@@ -236,16 +236,14 @@ Deleting and renaming sheets is out, for the same reason inserting rows is: both
   Untouched entries are copied as bytes and are exactly identical, checksum and compressed size included, so nothing is recompressed.
   Five parts are rewritten: the edited sheets, `xl/styles.xml`, `xl/workbook.xml`, and, only when there was a calculation chain to drop, `[Content_Types].xml` and `xl/_rels/workbook.xml.rels`.
   A rewritten part is re-emitted from the XML event stream, which does not carry attribute order, self-closing tag spelling, comments or processing instructions. So it is semantically equivalent but not byte-identical, and the byte-identity test can only cover the parts we did not touch. Whether that gap ever matters is unknown.
-- **Recalculation and the zip's shape, confirmed in Excel in the browser (desktop still open).**
-  A filled file opened in Excel in the browser with no repair prompt, and every expectation on the generated Checks sheet held.
-  So three things we could not test are no longer guesses: an entry described after its data is accepted, a sheet with no `dimension` element is accepted, and `fullCalcOnLoad` makes Excel recalculate a stale cached result.
-  Desktop Excel is a stricter implementation and has not been tried, so this is evidence rather than a closed question. `npm run manual-check` builds the file to try it with.
-  The paragraph below is what that check was originally about, kept because the desktop half is still open.
-- **Recalculation on open needs confirming against real Excel.**
-  Changing a value makes every cached formula result downstream of it stale.
-  The plan is to drop `xl/calcChain.xml`, which is a cache Excel rebuilds, and set `fullCalcOnLoad` so Excel recomputes on open.
-  Dropping a part means also removing its content-type override and its relationship, or confirming Excel tolerates the dangling ones. Neither is verified yet.
-  The `dimension` element is a related unknown. It sits before the row data, so a single pass cannot know the final extent when it has to be emitted. It is optional in the schema, so dropping it should be safe, and that should be checked rather than assumed.
+- **Recalculation and the zip's shape (checked in Excel in the browser, desktop still open).**
+  Four things we could not prove with a test are no longer guesses, all confirmed in Excel in the browser on 2026-08-17.
+  An entry described after its data is accepted, which is what lets a sheet be deflated as it streams rather than buffered.
+  A sheet with no `dimension` element is accepted, which a single pass cannot emit correctly because the element precedes the rows it describes.
+  `fullCalcOnLoad` makes Excel recompute a cached formula result that our edit made stale.
+  And dropping `xl/calcChain.xml` along with its content type override and its relationship leaves nothing dangling.
+  That last one took two passes. The first template had no calculation chain, because `exceljs` writes none even for a workbook with formulas, so the code that removes one never ran. `scripts/manual-check.mjs` now splices one in so the branch is reachable.
+  Still open: desktop Excel is a stricter implementation than the browser one and has not been tried. `npm run manual-check` builds the file to try it with.
 - **What a written file does not update.**
   An Excel Table in the template does not grow to cover appended rows, and a chart pointing at a fixed range does not extend.
   A digitally signed workbook has its signature invalidated by any modification, which is inherent and not fixable.
