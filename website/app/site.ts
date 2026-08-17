@@ -13,6 +13,10 @@ export const FEATURES: readonly Feature[] = [
     body: "It streams the sheet instead of expanding it in memory, so memory stays flat as the sheet grows. Files that need gigabytes in other libraries read here in a couple hundred megabytes.",
   },
   {
+    title: "Fills templates",
+    body: "Open a template, write the cells that change, and every part of the file you didn't touch is copied across byte for byte. Charts, pivot tables and formatting survive, because we never look at them.",
+  },
+  {
     title: "Node and the browser",
     body: "One codebase on web standards. Other libraries stream in Node, but this streams a real file in the browser too, with no server.",
   },

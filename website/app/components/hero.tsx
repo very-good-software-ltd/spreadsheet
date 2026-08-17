@@ -10,11 +10,12 @@ export function Hero() {
           <span className="bg-linear-to-r from-emerald-500 via-teal-500 to-cyan-500 bg-clip-text text-transparent dark:from-emerald-400 dark:via-teal-400 dark:to-cyan-400">
             Very Good
           </span>{" "}
-          Spreadsheet reader
+          Spreadsheet library
         </h1>
         <p className="mt-5 text-lg text-gray-600 dark:text-gray-300">
           Streams <code className="font-mono">.xlsx</code> and <code className="font-mono">.ods</code> in Node and the
-          browser. Pick a file below and watch it read, however big it is.
+          browser, and fills in <code className="font-mono">.xlsx</code> templates without disturbing the rest of the
+          file. Pick a file below and watch it read, however big it is.
         </p>
         <div className="mt-8 flex flex-col items-center gap-4">
           <InstallCommand />
