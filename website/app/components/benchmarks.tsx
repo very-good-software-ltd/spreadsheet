@@ -44,11 +44,11 @@ export function Benchmarks() {
           <h3 className="text-lg font-semibold">Reading .ods</h3>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             .ods is a different story. OpenDocument keeps the whole spreadsheet in one compressed stream you can't seek
-            into, so we re-read from the start for each sheet. That makes us slower on .ods than on xlsx, and slower than
-            readers that pull the entire file into memory. But the memory stays low. It barely moves as the file grows,
-            201 MB on a 14 MB file and 249 MB on a 48 MB one. So on a big .ods we finish where the load-everything
-            readers can't. And .ods can get faster. Most of it is re-reading the stream for each sheet, which we can
-            skip, so there is room to close the gap once a real workload needs it.
+            into, so we re-read from the start for each sheet. That makes us slower on .ods than on xlsx, and slower
+            than readers that pull the entire file into memory. But the memory stays low. It barely moves as the file
+            grows, 201 MB on a 14 MB file and 249 MB on a 48 MB one. So on a big .ods we finish where the
+            load-everything readers can't. And .ods can get faster. Most of it is re-reading the stream for each sheet,
+            which we can skip, so there is room to close the gap once a real workload needs it.
           </p>
 
           <div className="mt-6 overflow-x-auto">
