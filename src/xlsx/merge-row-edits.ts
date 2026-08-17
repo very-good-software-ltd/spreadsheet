@@ -43,8 +43,10 @@ export async function* mergeRowEdits(cells: readonly CellEdit[], blocks: readonl
   const sources = [lookahead(cellRows(cells)), ...blocks.map((block) => lookahead(blockRows(block)))];
 
   for (;;) {
-    const heads = await Promise.all(sources.map((source) => source.peek()));
-    const next = smallestRowNumber(heads);
+    // Each source is carried alongside the row it is offering, so advancing one
+    // needs no lookup back into the list by position.
+    const waiting = await Promise.all(sources.map(async (source) => ({ source, head: await source.peek() })));
+    const next = smallestRowNumber(waiting);
 
     if (next === undefined) {
       return;
@@ -53,7 +55,7 @@ export async function* mergeRowEdits(cells: readonly CellEdit[], blocks: readonl
     const claims = new Map<number, Claim>();
     let inheritFrom: number | undefined;
 
-    for (const [index, head] of heads.entries()) {
+    for (const { source, head } of waiting) {
       if (head === undefined || head.number !== next) {
         continue;
       }
@@ -66,7 +68,7 @@ export async function* mergeRowEdits(cells: readonly CellEdit[], blocks: readonl
       }
 
       inheritFrom = head.inheritFrom ?? inheritFrom;
-      await (sources[index] as Lookahead<PendingRow>).drop();
+      await source.drop();
     }
 
     yield {
@@ -77,10 +79,10 @@ export async function* mergeRowEdits(cells: readonly CellEdit[], blocks: readonl
   }
 }
 
-function smallestRowNumber(heads: readonly (PendingRow | undefined)[]): number | undefined {
+function smallestRowNumber(waiting: readonly { readonly head: PendingRow | undefined }[]): number | undefined {
   let smallest: number | undefined;
 
-  for (const head of heads) {
+  for (const { head } of waiting) {
     if (head !== undefined && (smallest === undefined || head.number < smallest)) {
       smallest = head.number;
     }
@@ -102,8 +104,8 @@ async function* cellRows(cells: readonly CellEdit[]): AsyncIterable<PendingRow> 
     byRow.set(edit.row, row);
   }
 
-  for (const number of [...byRow.keys()].sort((a, b) => a - b)) {
-    yield { number, cells: byRow.get(number) as Map<number, Claim>, inheritFrom: undefined };
+  for (const [number, cells] of [...byRow].sort(([left], [right]) => left - right)) {
+    yield { number, cells, inheritFrom: undefined };
   }
 }
 

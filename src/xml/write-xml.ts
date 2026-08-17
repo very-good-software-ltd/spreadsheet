@@ -7,9 +7,17 @@ export function writeXmlEvent(event: XmlEvent): string {
     case "open": {
       // Built by appending rather than by mapping and joining, which would allocate
       // two arrays for every tag. A sheet has several tags per cell.
+      // Attributes are read by name rather than through Object.entries, which
+      // allocates a pair of arrays per attribute on a path that runs several times
+      // per cell. The undefined branch is unreachable, since the names come from
+      // the object itself, but taking it costs one comparison and keeps this
+      // honest about what the index signature actually promises.
       let out = `<${event.name}`;
       for (const name of Object.keys(event.attributes)) {
-        out += ` ${name}="${escapeAttribute(event.attributes[name] as string)}"`;
+        const value = event.attributes[name];
+        if (value !== undefined) {
+          out += ` ${name}="${escapeAttribute(value)}"`;
+        }
       }
       return `${out}>`;
     }

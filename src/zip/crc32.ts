@@ -31,9 +31,10 @@ export function crc32(bytes: Uint8Array, previous = 0): number {
   // hundreds of millions of times for a large sheet, and the iterator protocol
   // costs more than the checksum does at that count.
   for (let index = 0; index < bytes.length; index += 1) {
-    // The table is 256 wide and the index is masked to a byte, so neither lookup
-    // can miss, but the index signature does not know that.
-    state = (state >>> 8) ^ (TABLE[(state ^ (bytes[index] as number)) & 0xff] as number);
+    // Neither lookup can miss: the loop bounds the first and the mask bounds the
+    // second to the table's 256 entries. The index signature cannot say so, and
+    // the fallbacks cost nothing measurable, so they stand in for an assertion.
+    state = (state >>> 8) ^ (TABLE[(state ^ (bytes[index] ?? 0)) & 0xff] ?? 0);
   }
 
   return ~state >>> 0;
