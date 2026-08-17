@@ -29,6 +29,7 @@ Worth knowing before you rely on it.
 Only `.xlsx` can be written, not `.ods`.
 Rows are written over, never inserted, and nothing is pushed down, so a template with a totals block under its data region can have that block overwritten.
 `save()` streams rather than returning bytes, so a failure part way through leaves an incomplete file, and calling it twice throws because your row sources have already been read.
+A file past 4 GB, or with a single part past 4 GB, needs Zip64 and throws rather than being written wrong, the same way reading a Zip64 archive throws.
 
 
 ### Fixed

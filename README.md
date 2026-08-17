@@ -413,6 +413,7 @@ Saving twice throws, because your row sources have already been read and the sec
 - Deleting or renaming a sheet, for the same reason: both ripple into everything that refers to them.
 - Growing an Excel Table or a chart range to cover rows you appended.
 - Keeping a digital signature valid. Any change to a file invalidates it.
+- Files past 4 GB, or with a single part past 4 GB. Those need Zip64, which we do not write, and we throw rather than produce a file no reader will open. This mirrors the read side, which throws on a Zip64 archive. Handling files that large is its own piece of work.
 
 One template shape is worth calling out.
 If the data region has a totals block underneath it, writing more rows than the region has room for overwrites that block.

@@ -98,6 +98,7 @@ This keeps memory bounded for a large sheet, since the decompressed bytes are pu
 `fflate` could not give us backpressured decompression, so it moved to a development dependency.
 We accept the maintenance of hand rolled binary parsing because the part of the ZIP format that xlsx uses is frozen, the surface is small and read only, and correctness is pinned by comparing our reader against `fflate` on many archives.
 Zip64, encryption, and unknown compression methods are not supported and throw rather than misread.
+The writer added by decision 11 holds the same line from the other side. A size, an offset or an entry count past what a 32-bit or 16-bit header field holds throws rather than writing the wrapped value, which would produce an archive no reader opens. So 4 GB is the ceiling in both directions, and lifting it is one piece of work on both halves rather than two.
 
 
 ### 10. Honest about size and memory claims

@@ -4,6 +4,7 @@ import { BytesByteRange } from "../src/io/byte-range";
 import { crc32 } from "../src/zip/crc32";
 import { createZipWriter } from "../src/zip/create-zip-writer";
 import { openZip } from "../src/zip/open-zip";
+import type { StoredZipEntry } from "../src/zip/zip-archive";
 
 // fflate writes the archives and our native reader reads them back, so a mature
 // implementation produces the input rather than a hand-authored one.
@@ -253,6 +254,52 @@ describe("NativeZipWriter", () => {
     await collectChunks(writer.open());
 
     expect(() => writer.open()).toThrow(/once/i);
+  });
+
+  describe("what it refuses rather than miswrite", () => {
+    // The sizes and offsets in a zip header are 32 bits wide. Past 4 GB a file
+    // needs Zip64, which we do not write, and writing the wrapped value would
+    // produce an archive no reader opens. Our reader throws on Zip64 rather than
+    // misread, so the writer throws rather than miswrite.
+    function entryClaiming(path: string, size: number): StoredZipEntry {
+      return {
+        path,
+        method: 0,
+        crc32: 0,
+        compressedSize: size,
+        uncompressedSize: size,
+        dosTime: 0,
+        dosDate: 33,
+        utf8Path: true,
+        bytes: () =>
+          new ReadableStream<Uint8Array>({
+            start(controller): void {
+              controller.close();
+            },
+          }),
+      };
+    }
+
+    it("refuses an entry too large for a 32-bit size, at the call", () => {
+      const writer = createZipWriter();
+
+      expect(() => writer.copy(entryClaiming("huge.xml", 0x1_0000_0000))).toThrow(/Zip64/i);
+    });
+
+    it("accepts an entry right up to the limit", () => {
+      const writer = createZipWriter();
+
+      expect(() => writer.copy(entryClaiming("big.xml", 0xffff_ffff))).not.toThrow();
+    });
+
+    it("refuses more entries than a zip can list, at the call", () => {
+      const writer = createZipWriter();
+      for (let i = 0; i < 0xffff; i += 1) {
+        writer.copy(entryClaiming(`part${i}.xml`, 0));
+      }
+
+      expect(() => writer.copy(entryClaiming("one-too-many.xml", 0))).toThrow(/Zip64/i);
+    });
   });
 
   it("surfaces a failing content source as a stream error", async () => {

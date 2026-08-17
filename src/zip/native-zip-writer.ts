@@ -23,6 +23,13 @@ const VERSION_NEEDED_FOR_DEFLATE = 20;
 
 const UTF8_PATH_FLAG = 0x0800;
 
+// A zip header holds a size or an offset in 32 bits, and the entry count in 16.
+// Past either, a file needs Zip64, which we do not write. Our reader throws on
+// Zip64 rather than misread a file, so the writer throws rather than write one no
+// reader will open. Handling files this large is its own piece of work.
+const MAX_SIZE = 0xffff_ffff;
+const MAX_ENTRIES = 0xffff;
+
 // Bit 3 says the checksum and sizes are absent from the local header and follow
 // the data instead. Deflating as we stream means we cannot know either until the
 // data is written, and the local header comes first, so an entry we compress
@@ -52,6 +59,9 @@ export class NativeZipWriter implements ZipWriter {
   private opened = false;
 
   copy(entry: StoredZipEntry): void {
+    // A copy declares its sizes up front, so this is knowable at the call.
+    checkSize(entry.path, "compressed size", entry.compressedSize);
+    checkSize(entry.path, "size", entry.uncompressedSize);
     this.declare(entry.path);
     this.pending.push({ kind: "copy", path: entry.path, stored: entry });
   }
@@ -74,6 +84,11 @@ export class NativeZipWriter implements ZipWriter {
     if (this.declared.has(path)) {
       throw new Error(`Zip entry already declared: ${path}`);
     }
+    if (this.declared.size >= MAX_ENTRIES) {
+      throw new Error(
+        `Cannot write ${MAX_ENTRIES + 1} entries: a zip lists at most ${MAX_ENTRIES} without Zip64, which we do not write`,
+      );
+    }
     this.declared.add(path);
   }
 }
@@ -86,6 +101,7 @@ async function* writeArchive(entries: readonly PendingEntry[]): AsyncIterable<Ui
   for (const entry of entries) {
     const path = encoder.encode(entry.path);
     const localHeaderOffset = offset;
+    checkSize(entry.path, "position in the archive", localHeaderOffset);
 
     if (entry.kind === "copy") {
       const { stored } = entry;
@@ -139,6 +155,12 @@ async function* writeArchive(entries: readonly PendingEntry[]): AsyncIterable<Ui
       yield chunk;
     }
 
+    // An entry we compress ourselves only reveals its sizes once it is written,
+    // so unlike a copy this cannot be caught at the call. The stream errors and
+    // leaves a truncated archive, which is the same failure as any other late one.
+    checkSize(entry.path, "compressed size", compressedSize);
+    checkSize(entry.path, "size", source.size);
+
     yield dataDescriptor(source.crc32, compressedSize, source.size);
     offset += DATA_DESCRIPTOR_SIZE;
 
@@ -156,6 +178,7 @@ async function* writeArchive(entries: readonly PendingEntry[]): AsyncIterable<Ui
   }
 
   const directoryOffset = offset;
+  checkSize("the central directory", "position in the archive", directoryOffset);
   let directorySize = 0;
 
   for (const record of directory) {
@@ -233,6 +256,14 @@ function toStream(chunks: AsyncIterable<Uint8Array>): ReadableStream<Uint8Array>
       void iterator.return?.(undefined);
     },
   });
+}
+
+function checkSize(what: string, field: string, value: number): void {
+  if (value > MAX_SIZE) {
+    throw new Error(
+      `Cannot write ${what}: its ${field} is ${value} bytes, past the ${MAX_SIZE + 1} a zip addresses without Zip64, which we do not write`,
+    );
+  }
 }
 
 function localHeader(record: DirectoryRecord): Uint8Array {
