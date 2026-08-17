@@ -1,6 +1,6 @@
 import type { ByteRange } from "../io/byte-range";
 import { readAllBytes } from "../io/source";
-import type { ZipArchive, ZipEntry } from "./zip-archive";
+import type { StoredZipEntry, ZipArchive, ZipEntry } from "./zip-archive";
 
 // A read-only ZIP reader over a ByteRange. It reads the central directory to
 // locate entries, then reads and decompresses each entry on demand, so the
@@ -28,11 +28,18 @@ const OVERFLOW_32 = 0xffff_ffff;
 // window is a view, not a copy.
 const ENTRY_CHUNK_SIZE = 1 << 20;
 
+// Bit 11 of the general purpose flag marks the entry path as UTF-8.
+const UTF8_PATH_FLAG = 0x0800;
+
 interface EntryRecord {
   readonly method: number;
+  readonly crc32: number;
   readonly compressedSize: number;
   readonly uncompressedSize: number;
   readonly localHeaderOffset: number;
+  readonly dosTime: number;
+  readonly dosDate: number;
+  readonly flags: number;
 }
 
 export class NativeZipArchive implements ZipArchive {
@@ -79,6 +86,25 @@ export class NativeZipArchive implements ZipArchive {
       return stream.readable;
     }
     throw new Error(`Unsupported compression method ${record.method} for ${path}`);
+  }
+
+  storedEntry(path: string): StoredZipEntry {
+    const record = this.records.get(path);
+    if (record === undefined) {
+      throw new Error(`Zip entry not found: ${path}`);
+    }
+
+    return {
+      path,
+      method: record.method,
+      crc32: record.crc32,
+      compressedSize: record.compressedSize,
+      uncompressedSize: record.uncompressedSize,
+      dosTime: record.dosTime,
+      dosDate: record.dosDate,
+      utf8Path: (record.flags & UTF8_PATH_FLAG) !== 0,
+      bytes: (): ReadableStream<Uint8Array> => this.entryStream(record),
+    };
   }
 
   private entryStream(record: EntryRecord): ReadableStream<Uint8Array<ArrayBuffer>> {
@@ -138,7 +164,11 @@ async function readCentralDirectory(source: ByteRange): Promise<Map<string, Entr
       throw new Error("Malformed zip: expected a central directory header");
     }
 
+    const flags = view.getUint16(pos + 8, true);
     const method = view.getUint16(pos + 10, true);
+    const dosTime = view.getUint16(pos + 12, true);
+    const dosDate = view.getUint16(pos + 14, true);
+    const entryCrc32 = view.getUint32(pos + 16, true);
     const compressedSize = view.getUint32(pos + 20, true);
     const uncompressedSize = view.getUint32(pos + 24, true);
     const nameLength = view.getUint16(pos + 28, true);
@@ -151,7 +181,16 @@ async function readCentralDirectory(source: ByteRange): Promise<Map<string, Entr
     }
 
     const name = decoder.decode(directory.subarray(pos + 46, pos + 46 + nameLength));
-    records.set(name, { method, compressedSize, uncompressedSize, localHeaderOffset });
+    records.set(name, {
+      method,
+      crc32: entryCrc32,
+      compressedSize,
+      uncompressedSize,
+      localHeaderOffset,
+      dosTime,
+      dosDate,
+      flags,
+    });
 
     pos += 46 + nameLength + extraLength + commentLength;
   }

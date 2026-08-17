@@ -40,10 +40,11 @@ export async function toByteRange(source: BinarySource | Blob): Promise<ByteRang
   return new BytesByteRange(await readAllBytes(source));
 }
 
-// DecompressionStream's writer only accepts an ArrayBuffer-backed view, so the
-// input is normalised to one here. This re-views the same buffer with no copy.
-// Only a SharedArrayBuffer, which our inputs never are, falls back to copying.
-function arrayBufferBacked(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
+// A DecompressionStream or CompressionStream writer only accepts an
+// ArrayBuffer-backed view, so the input is normalised to one here. This re-views
+// the same buffer with no copy. Only a SharedArrayBuffer, which our inputs never
+// are, falls back to copying.
+export function arrayBufferBacked(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   return bytes.buffer instanceof ArrayBuffer
     ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
     : new Uint8Array(bytes);

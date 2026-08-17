@@ -1,6 +1,8 @@
-import { strToU8, zipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { BytesByteRange } from "../src/io/byte-range";
+import { crc32 } from "../src/zip/crc32";
+import { createZipWriter } from "../src/zip/create-zip-writer";
 import { openZip } from "../src/zip/open-zip";
 
 // fflate writes the archives and our native reader reads them back, so a mature
@@ -142,5 +144,124 @@ describe("NativeZipArchive", () => {
 
   it("rejects a buffer too short to be a zip", async () => {
     await expect(openBytes(new Uint8Array([1, 2, 3]))).rejects.toThrow("Malformed zip");
+  });
+});
+
+describe("crc32", () => {
+  // The published check value for CRC-32 (PKWARE APPNOTE, and the standard
+  // "check" field of the CRC-32/ISO-HDLC parameters) is the digest of "123456789".
+  it("matches the published check value", () => {
+    expect(crc32(strToU8("123456789"))).toBe(0xcbf4_3926);
+  });
+
+  it("is zero for no input", () => {
+    expect(crc32(new Uint8Array(0))).toBe(0);
+  });
+
+  it("accumulates across chunks", () => {
+    expect(crc32(strToU8("789"), crc32(strToU8("123456")))).toBe(0xcbf4_3926);
+  });
+});
+
+describe("NativeZipWriter", () => {
+  function chunksOf(text: string): () => AsyncIterable<Uint8Array> {
+    return async function* () {
+      yield strToU8(text);
+    };
+  }
+
+  function unzipped(bytes: Uint8Array, path: string): Uint8Array {
+    const entry = unzipSync(bytes)[path];
+    if (entry === undefined) {
+      throw new Error(`fflate found no entry ${path} in our output`);
+    }
+    return entry;
+  }
+
+  it("writes an archive fflate reads back", async () => {
+    const writer = createZipWriter();
+    writer.add("a.txt", chunksOf("hello"));
+    writer.add("nested/deep/path.xml", chunksOf("<r/>"));
+    writer.add("empty.bin", async function* () {});
+
+    const bytes = concat(await collectChunks(writer.open()));
+
+    expect(strFromU8(unzipped(bytes, "a.txt"))).toBe("hello");
+    expect(strFromU8(unzipped(bytes, "nested/deep/path.xml"))).toBe("<r/>");
+    expect(unzipped(bytes, "empty.bin")).toEqual(new Uint8Array(0));
+  });
+
+  it("writes an archive our own reader reads back", async () => {
+    const writer = createZipWriter();
+    writer.add("xl/worksheets/sheet1.xml", chunksOf(`<worksheet>${"data ".repeat(5000)}</worksheet>`));
+
+    const archive = await openBytes(concat(await collectChunks(writer.open())));
+
+    expect(strFromU8(await archive.read("xl/worksheets/sheet1.xml"))).toBe(
+      `<worksheet>${"data ".repeat(5000)}</worksheet>`,
+    );
+  });
+
+  it("copies an entry through without recompressing it", async () => {
+    const source = await openBytes(zipSync({ "big.xml": strToU8(`<x>${"y".repeat(20000)}</x>`) }));
+    const stored = source.storedEntry("big.xml");
+
+    const writer = createZipWriter();
+    writer.copy(stored);
+    const bytes = concat(await collectChunks(writer.open()));
+
+    const copied = (await openBytes(bytes)).storedEntry("big.xml");
+    expect(copied.compressedSize).toBe(stored.compressedSize);
+    expect(copied.crc32).toBe(stored.crc32);
+    expect(copied.method).toBe(stored.method);
+    expect(strFromU8(unzipped(bytes, "big.xml"))).toBe(`<x>${"y".repeat(20000)}</x>`);
+  });
+
+  it("keeps declaration order and mixes copies with added entries", async () => {
+    const source = await openBytes(zipSync({ "keep.txt": strToU8("kept"), "drop.txt": strToU8("dropped") }));
+
+    const writer = createZipWriter();
+    writer.copy(source.storedEntry("keep.txt"));
+    writer.add("new.txt", chunksOf("added"));
+
+    const archive = await openBytes(concat(await collectChunks(writer.open())));
+
+    expect(archive.entries().map((entry) => entry.path)).toEqual(["keep.txt", "new.txt"]);
+    expect(strFromU8(await archive.read("keep.txt"))).toBe("kept");
+    expect(strFromU8(await archive.read("new.txt"))).toBe("added");
+  });
+
+  it("preserves a non-ascii entry path", async () => {
+    const writer = createZipWriter();
+    writer.add("unïcode-nàme.xml", chunksOf("<x/>"));
+
+    const archive = await openBytes(concat(await collectChunks(writer.open())));
+
+    expect(archive.entries().map((entry) => entry.path)).toEqual(["unïcode-nàme.xml"]);
+  });
+
+  it("rejects two entries with the same path", () => {
+    const writer = createZipWriter();
+    writer.add("a.txt", chunksOf("one"));
+
+    expect(() => writer.add("a.txt", chunksOf("two"))).toThrow(/already/i);
+  });
+
+  it("refuses to be opened twice, since content sources may not be re-iterable", async () => {
+    const writer = createZipWriter();
+    writer.add("a.txt", chunksOf("hello"));
+    await collectChunks(writer.open());
+
+    expect(() => writer.open()).toThrow(/once/i);
+  });
+
+  it("surfaces a failing content source as a stream error", async () => {
+    const writer = createZipWriter();
+    writer.add("a.txt", async function* () {
+      yield strToU8("partial");
+      throw new Error("source blew up");
+    });
+
+    await expect(collectChunks(writer.open())).rejects.toThrow("source blew up");
   });
 });
