@@ -2,16 +2,28 @@ import type { CellInput } from "../cell-input";
 import { columnIndexOf, rowNumberOf } from "../cell-reference";
 import type { Editor, RowSource, WorksheetEditor, WriteRowsOptions } from "../editor";
 import { createXmlReader } from "../xml/create-xml-reader";
-import type { XmlReader } from "../xml/xml-reader";
+import type { XmlEvent, XmlReader } from "../xml/xml-reader";
 import { createZipWriter } from "../zip/create-zip-writer";
 import type { ZipArchive } from "../zip/zip-archive";
 import { type CellEdit, mergeRowEdits, type RowBlock } from "./merge-row-edits";
 import type { Styles } from "./read-styles";
 import type { WorksheetRef } from "./read-workbook";
+import { withoutContentTypeOverride, withoutRelationshipTo, withRecalculationOnLoad } from "./write-package";
 import { writeSheetPart } from "./write-sheet";
 import { DateStyleTable, writeStylesPart } from "./write-styles";
 
 const STYLES_PART = "xl/styles.xml";
+const WORKBOOK_PART = "xl/workbook.xml";
+const WORKBOOK_RELATIONSHIPS_PART = "xl/_rels/workbook.xml.rels";
+const CONTENT_TYPES_PART = "[Content_Types].xml";
+
+// The calculation chain records the order a spreadsheet application evaluated the
+// formulas in. It is a cache, rebuilt on open, and an edit invalidates it, so it
+// is left out of the written file rather than carried across wrong. Its content
+// type override and its relationship go with it, since the part they name is no
+// longer there.
+const CALCULATION_CHAIN_PART = "xl/calcChain.xml";
+const CALCULATION_CHAIN_TARGET = "calcChain.xml";
 
 const CELL_REFERENCE = /^[A-Z]{1,3}[1-9][0-9]*$/;
 
@@ -72,15 +84,39 @@ export class XlsxEditor implements Editor {
 
     const edited = [...this.edits].filter(([, edits]) => hasEdits(edits));
     const editedPaths = new Set(edited.map(([index]) => (this.worksheets[index] as WorksheetRef).path));
+    const hadCalculationChain = this.archive.has(CALCULATION_CHAIN_PART);
+
+    const part = (path: string): AsyncIterable<readonly XmlEvent[]> => this.xml.read(this.archive.openStream(path));
+
+    // Rewritten rather than copied, so the parts a reader needs to agree with
+    // each other still do.
+    const rewritten = new Map<string, () => AsyncIterable<string>>([
+      [WORKBOOK_PART, () => withRecalculationOnLoad(part(WORKBOOK_PART))],
+    ]);
+
+    if (hadCalculationChain) {
+      rewritten.set(CONTENT_TYPES_PART, () =>
+        withoutContentTypeOverride(part(CONTENT_TYPES_PART), `/${CALCULATION_CHAIN_PART}`),
+      );
+      rewritten.set(WORKBOOK_RELATIONSHIPS_PART, () =>
+        withoutRelationshipTo(part(WORKBOOK_RELATIONSHIPS_PART), CALCULATION_CHAIN_TARGET),
+      );
+    }
 
     // The styles part is declared last on purpose. A date only learns which cell
     // format it needs while its sheet is written, so the part has to be produced
     // after every sheet that might add one.
     for (const entry of this.archive.entries()) {
-      if (entry.path === STYLES_PART || editedPaths.has(entry.path)) {
+      if (entry.path === STYLES_PART || editedPaths.has(entry.path) || entry.path === CALCULATION_CHAIN_PART) {
         continue;
       }
-      writer.copy(this.archive.storedEntry(entry.path));
+
+      const rewrite = rewritten.get(entry.path);
+      if (rewrite === undefined) {
+        writer.copy(this.archive.storedEntry(entry.path));
+      } else {
+        writer.add(entry.path, text(rewrite));
+      }
     }
 
     for (const [index, edits] of edited) {
@@ -89,7 +125,7 @@ export class XlsxEditor implements Editor {
         ref.path,
         text(() =>
           writeSheetPart(
-            this.xml.read(this.archive.openStream(ref.path)),
+            part(ref.path),
             {
               positioned: mergeRowEdits(edits.cells, edits.blocks),
               appended: appendedRows(edits.appended),
@@ -103,7 +139,7 @@ export class XlsxEditor implements Editor {
     if (this.archive.has(STYLES_PART)) {
       writer.add(
         STYLES_PART,
-        text(() => writeStylesPart(this.xml.read(this.archive.openStream(STYLES_PART)), dateStyles)),
+        text(() => writeStylesPart(part(STYLES_PART), dateStyles)),
       );
     }
 

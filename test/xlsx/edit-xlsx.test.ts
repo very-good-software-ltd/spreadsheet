@@ -1,6 +1,9 @@
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { formula } from "../../src/cell-input";
+import { BytesByteRange } from "../../src/io/byte-range";
 import { Workbook } from "../../src/workbook";
+import { openZip } from "../../src/zip/open-zip";
 import { odsWith } from "../support/ods-fixture";
 import { xlsx } from "../support/xlsx-fixture";
 
@@ -195,6 +198,54 @@ describe("editing an xlsx", () => {
 
     expect(await cellsOf(bytes, "One")).toEqual([["A"]]);
     expect(await cellsOf(bytes, "Two")).toEqual([["B"]]);
+  });
+
+  describe("recalculation", () => {
+    async function partsOf(bytes: Uint8Array): Promise<Record<string, string>> {
+      const archive = await openZip(new BytesByteRange(bytes));
+      const parts: Record<string, string> = {};
+      for (const entry of archive.entries()) {
+        parts[entry.path] = strFromU8(await archive.read(entry.path));
+      }
+      return parts;
+    }
+
+    async function written(source: Uint8Array): Promise<Record<string, string>> {
+      const editor = (await Workbook.open(source)).edit();
+      editor.worksheet(0).set("A1", 1);
+      return partsOf(await bytesOf(editor.save()));
+    }
+
+    it("tells a spreadsheet application to recalculate, since an edit staled every cached result", async () => {
+      const parts = await written(xlsx([{ name: "Data", rows: [[1]] }]));
+
+      expect(parts["xl/workbook.xml"]).toContain('fullCalcOnLoad="1"');
+    });
+
+    it("leaves out the calculation chain, which an edit invalidates", async () => {
+      const source = zipSync({
+        ...unzipSync(xlsx([{ name: "Data", rows: [[1]] }])),
+        "xl/calcChain.xml": strToU8('<calcChain xmlns="x"><c r="A1" i="1"/></calcChain>'),
+        "[Content_Types].xml": strToU8(
+          '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/xl/calcChain.xml" ContentType="calcChain"/><Override PartName="/xl/styles.xml" ContentType="styles"/></Types>',
+        ),
+      });
+
+      const parts = await written(source);
+
+      expect(Object.keys(parts)).not.toContain("xl/calcChain.xml");
+      expect(parts["[Content_Types].xml"]).not.toContain("calcChain");
+      expect(parts["xl/_rels/workbook.xml.rels"]).not.toContain("calcChain");
+      expect(parts["[Content_Types].xml"]).toContain("styles");
+    });
+
+    it("leaves the content types and relationships parts untouched when there was no chain to drop", async () => {
+      const source = xlsx([{ name: "Data", rows: [[1]] }]);
+      const before = await partsOf(source);
+      const after = await written(source);
+
+      expect(after["xl/_rels/workbook.xml.rels"]).toBe(before["xl/_rels/workbook.xml.rels"]);
+    });
   });
 
   it("keeps every part it did not touch", async () => {
