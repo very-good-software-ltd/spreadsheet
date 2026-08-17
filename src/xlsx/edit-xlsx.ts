@@ -310,12 +310,31 @@ function hasEdits(edits: SheetEdits): boolean {
   return edits.cells.length > 0 || edits.blocks.length > 0 || edits.appended.length > 0;
 }
 
+// A part is produced a row at a time, and each row is small. Encoding and handing
+// over every one of them separately means a million trips through the encoder and
+// a million awaited writes into the compressor for a million-row sheet, which
+// costs more than the work itself. Gathering them into blocks first crosses those
+// boundaries once per block instead. This is the same cost the reader hit yielding
+// one XML event at a time, and the same fix.
+const OUTPUT_BLOCK_CHARACTERS = 64 * 1024;
+
 function encoded(chunks: () => AsyncIterable<string>): () => AsyncIterable<Uint8Array> {
   const encoder = new TextEncoder();
 
   return async function* (): AsyncIterable<Uint8Array> {
+    let held = "";
+
     for await (const chunk of chunks()) {
-      yield encoder.encode(chunk);
+      held += chunk;
+
+      if (held.length >= OUTPUT_BLOCK_CHARACTERS) {
+        yield encoder.encode(held);
+        held = "";
+      }
+    }
+
+    if (held !== "") {
+      yield encoder.encode(held);
     }
   };
 }
