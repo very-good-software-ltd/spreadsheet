@@ -91,3 +91,27 @@ If you cannot name that thing, there is no comment to write.
 
 Doc comments on a type or method describe the contract a caller relies on, the inputs, the outputs, the errors, the edge cases.
 They never describe why the abstraction exists or what backs it.
+
+
+## Writing things down
+
+Four prose files, each with one job. A fact belongs in exactly one of them.
+
+`README.md` is for someone using the library.
+What it does, how to call it, and the limits they will hit.
+It says enough about why to help someone decide whether to use it, and no more.
+
+`CHANGELOG.md` is what changed, in the reader's terms rather than ours.
+Add to `Unreleased` as part of the change that earns it, never in a batch at release time.
+By then nobody remembers which of a dozen commits a user would actually notice.
+Describe the capability and the caveat that comes with it, not how it is built.
+A refactor nobody can observe gets no entry.
+A bug a user could have hit gets a `Fixed` entry even if nobody reported it.
+
+`CONTEXT.md` is why.
+The decision, what we turned down, the reason, and the questions still open.
+This is the only place rationale lives.
+When a decision changes, edit it in place and note what changed, rather than appending a second answer.
+
+`MANUAL-CHECKS.md` is what no test can prove, and how to begin proving it by hand.
+A check that cannot be acted on without asking someone is not written down properly yet.

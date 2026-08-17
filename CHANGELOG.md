@@ -7,6 +7,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Write `.xlsx` files.
+  `workbook.edit()` returns an editor and `editor.save()` streams the result as bytes.
+  Reading and writing stay separate: the editor produces a new file and never changes the one you opened.
+- Fill a template.
+  Every part of the file you do not edit is copied across byte for byte, so charts, pivot tables, drawings, macros and formatting survive.
+- Build a file from nothing with `Workbook.create()`.
+  It is the same code from the second line on, because from scratch is a template that happens to be empty.
+- Write a cell with `worksheet.set("C3", value)`, taking a number, a string, a boolean, a `Date`, `null` to blank it, or `formula(...)`.
+  A written cell keeps whatever formatting it already had.
+- Write rows with `writeRows(startRow, rows, { inheritFrom })`, or after the last row with `appendRows(rows)`.
+  Both take an array, an iterable or an async iterable, and read it only as the output drains, so a generator streams and nothing is held.
+- Add a sheet with `editor.addWorksheet(name)`.
+- Written files ask the application to recalculate when it opens them, so a total over cells you changed comes out right rather than showing the result the template was saved with.
+- Writing a `Date` into a cell that has no date format derives one and keeps the cell's font, fill and border.
+- Convert between cell references and coordinates with `cellReference`, `columnIndexOf`, `columnLetters` and `rowNumberOf`.
+
+Worth knowing before you rely on it.
+Only `.xlsx` can be written, not `.ods`.
+Rows are written over, never inserted, and nothing is pushed down, so a template with a totals block under its data region can have that block overwritten.
+`save()` streams rather than returning bytes, so a failure part way through leaves an incomplete file, and calling it twice throws because your row sources have already been read.
+
+
+### Fixed
+
+- A number format declared inside a differential format (`dxfs`) is no longer read as if it were one of the workbook's own custom formats.
+  It could give a format id a date format code it does not have, and make plain numbers using that id read as dates.
+
+
 ## [0.1.0] - 2026-08-05
 
 ### Added
