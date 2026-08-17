@@ -1,4 +1,4 @@
-import { type CellInput, Formula } from "../cell-input";
+import { type CellInput, Formula, SpreadsheetDate } from "../cell-input";
 import { cellReference, columnIndexOf } from "../cell-reference";
 import { writeXmlEvent, XML_DECLARATION } from "../xml/write-xml";
 import type { XmlEvent } from "../xml/xml-reader";
@@ -292,8 +292,8 @@ function writeRow(
 function writeCell(ref: string, value: CellInput, style: string | undefined, context: SheetWriteContext): string {
   const attributes: Record<string, string> = { [Attribute.Reference]: ref };
 
-  if (value instanceof Date) {
-    const serial = dateToSerial(value, context.date1904);
+  if (value instanceof SpreadsheetDate) {
+    const serial = dateToSerial(value.value, context.date1904);
     const dateStyle = context.dateStyles.forDate(style, !Number.isInteger(serial));
     return cell({ ...attributes, [Attribute.Style]: dateStyle }, element(Element.Value, String(serial)));
   }
@@ -314,8 +314,21 @@ function writeCell(ref: string, value: CellInput, style: string | undefined, con
   if (typeof value === "number") {
     return cell(attributes, element(Element.Value, numberText(ref, value)));
   }
+  if (typeof value !== "string") {
+    throw new Error(`Cannot write ${describe(value)} to ${ref}`);
+  }
 
   return cell({ ...attributes, [Attribute.Type]: CellTypeCode.InlineString }, inlineString(ref, value));
+}
+
+// Only reachable from untyped code, since CellInput excludes both of these. A
+// Date is worth naming, because it is the obvious thing to reach for and the
+// reason it is refused is not obvious.
+function describe(value: unknown): string {
+  if (value instanceof Date) {
+    return 'a Date: a cell holds a calendar date with no time zone, so build one with date("2026-03-01") or date(2026, 3, 1)';
+  }
+  return `a ${typeof value}`;
 }
 
 function numberText(ref: string, value: number): string {

@@ -2,6 +2,7 @@ import { Readable } from "node:stream";
 import ExcelJS from "exceljs";
 import { describe, expect, it } from "vitest";
 import * as SheetJS from "xlsx";
+import { date } from "../../src/cell-input";
 import { BytesByteRange } from "../../src/io/byte-range";
 import { Workbook } from "../../src/workbook";
 import { openZip } from "../../src/zip/open-zip";
@@ -211,7 +212,7 @@ describe("writing a date into a template", () => {
     const source = await template();
     const editor = (await Workbook.open(source)).edit();
 
-    editor.worksheet("Report").set("A1", new Date("2020-06-01T00:00:00.000Z"));
+    editor.worksheet("Report").set("A1", date("2020-06-01"));
     const written = await bytesOf(editor.save());
 
     const workbook = await readWithExcelJs(written);
@@ -226,7 +227,7 @@ describe("writing a date into a template", () => {
     const source = await template();
     const editor = (await Workbook.open(source)).edit();
 
-    editor.worksheet("Report").set("A2", new Date("2020-06-01T00:00:00.000Z"));
+    editor.worksheet("Report").set("A2", date("2020-06-01"));
     const workbook = await Workbook.open(await bytesOf(editor.save()));
 
     for await (const row of workbook.worksheet("Report").rows()) {

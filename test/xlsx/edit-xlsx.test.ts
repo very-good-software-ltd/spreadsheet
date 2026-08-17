@@ -1,6 +1,6 @@
 import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
-import { formula } from "../../src/cell-input";
+import { date, formula } from "../../src/cell-input";
 import { BytesByteRange } from "../../src/io/byte-range";
 import { Workbook } from "../../src/workbook";
 import { openZip } from "../../src/zip/open-zip";
@@ -76,7 +76,7 @@ describe("editing an xlsx", () => {
       .set("A1", 42.5)
       .set("B1", "text")
       .set("C1", true)
-      .set("D1", new Date("2020-01-01T00:00:00.000Z"))
+      .set("D1", date("2020-01-01"))
       .set("E1", formula("SUM(A1:A1)"));
 
     const cells = await cellsOf(await bytesOf(editor.save()));

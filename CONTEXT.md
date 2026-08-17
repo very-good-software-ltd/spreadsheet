@@ -162,11 +162,16 @@ Row sources are `Iterable` or `AsyncIterable`, so an array works with no ceremon
 Nothing is consumed until save, which means an error in a caller's generator surfaces from `save` and not from the call that appeared to do the work.
 Everything else we can check, a malformed reference or an unknown sheet, is validated eagerly at the call, so the caller's own source is the only thing left that can fail late.
 
-A cell value is `number | string | boolean | Date | null | Formula`.
+A cell value is `number | string | boolean | null | Formula | SpreadsheetDate`.
 Errors are not writable. An error is a result, not an input, and the way to put one in a cell is a formula that produces it, such as `NA()`.
 `null` blanks a cell and keeps its formatting, which is the template intent. Removing a cell outright is not offered.
 Writing a plain value over a formula cell drops the formula, which is the one place the writer discards template content on purpose.
 `formula()` is a constructor rather than a bare string so that ods writing could later translate inside it without touching a call site. Its text is the A1 form Excel uses, a leading `=` is stripped, and it is emitted unparsed and unvalidated.
+
+`date()` is a constructor for the same reason, and a `Date` is refused outright.
+A cell holds a calendar date with no time zone while a `Date` is an instant, so converting one means picking a zone, and either choice is silently wrong for some caller. `new Date(2026, 2, 1)` is local midnight, which west of UTC is the last day of February, and date libraries hand out local-midnight `Date`s by default.
+We first shipped this accepting a `Date` read as UTC and documenting the trap. That failed our own bar: a confidently wrong quirk is worse than an open one, and a wrong day in a report is the worst failure class here. Refusing the type moves the mistake to compile time.
+`date()` also rejects a day that does not exist instead of letting `Date.UTC` roll it into the next month.
 
 A cell is addressed by its reference string, matching `Cell.ref` on the read side.
 Numbers would inherit an inconsistency we already have, since `Row.number` is one-based from the file while `Cell.columnIndex` is zero-based.

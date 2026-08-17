@@ -1,6 +1,6 @@
 import { createWriteStream, openAsBlob } from "node:fs";
 import { Writable } from "node:stream";
-import { Workbook } from "@very-good-software/spreadsheet";
+import { date, Workbook } from "@very-good-software/spreadsheet";
 
 // Open a template, fill in the parts that change, and write a new file. The
 // template's own charts, formatting and formulas are copied across untouched.
@@ -9,7 +9,7 @@ const editor = workbook.edit();
 
 const invoice = editor.worksheet("Invoice");
 invoice.set("C3", "Acme Ltd");
-invoice.set("C4", new Date("2026-03-01"));
+invoice.set("C4", date("2026-03-01"));
 
 invoice.writeRows(8, [
   ["Consulting", 12, 950],

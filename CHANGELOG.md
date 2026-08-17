@@ -16,13 +16,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   Every part of the file you do not edit is copied across byte for byte, so charts, pivot tables, drawings, macros and formatting survive.
 - Build a file from nothing with `Workbook.create()`.
   It is the same code from the second line on, because from scratch is a template that happens to be empty.
-- Write a cell with `worksheet.set("C3", value)`, taking a number, a string, a boolean, a `Date`, `null` to blank it, or `formula(...)`.
+- Write a cell with `worksheet.set("C3", value)`, taking a number, a string, a boolean, `null` to blank it, `formula(...)` or `date(...)`.
   A written cell keeps whatever formatting it already had.
+- Build a date with `date("2026-03-01")` or `date(2026, 3, 1, 14, 30)`, with a month from 1 to 12.
+  A `Date` is not accepted as a cell value on purpose. A cell holds a calendar date with no time zone while a `Date` is an instant, so `new Date(2026, 2, 1)` is local midnight and west of UTC is the last day of February.
+  `date` also refuses a day that does not exist rather than rolling it over, so `date(2026, 2, 30)` is an error and not the 2nd of March.
 - Write rows with `writeRows(startRow, rows, { inheritFrom })`, or after the last row with `appendRows(rows)`.
   Both take an array, an iterable or an async iterable, and read it only as the output drains, so a generator streams and nothing is held.
 - Add a sheet with `editor.addWorksheet(name)`.
 - Written files ask the application to recalculate when it opens them, so a total over cells you changed comes out right rather than showing the result the template was saved with.
-- Writing a `Date` into a cell that has no date format derives one and keeps the cell's font, fill and border.
+- Writing a date into a cell that has no date format derives one and keeps the cell's font, fill and border.
 - Convert between cell references and coordinates with `cellReference`, `columnIndexOf`, `columnLetters` and `rowNumberOf`.
 
 Worth knowing before you rely on it.

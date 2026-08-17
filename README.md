@@ -292,7 +292,7 @@ This is the point of the whole design, and it is why filling a client's template
 ```ts
 import { createWriteStream, openAsBlob } from "node:fs";
 import { Writable } from "node:stream";
-import { Workbook } from "@very-good-software/spreadsheet";
+import { date, Workbook } from "@very-good-software/spreadsheet";
 
 // Open a template, fill in the parts that change, and write a new file. The
 // template's own charts, formatting and formulas are copied across untouched.
@@ -301,7 +301,7 @@ const editor = workbook.edit();
 
 const invoice = editor.worksheet("Invoice");
 invoice.set("C3", "Acme Ltd");
-invoice.set("C4", new Date("2026-03-01"));
+invoice.set("C4", date("2026-03-01"));
 
 invoice.writeRows(8, [
   ["Consulting", 12, 950],
@@ -348,15 +348,16 @@ await editor.save().pipeTo(Writable.toWeb(createWriteStream("report.xlsx")));
 
 ### What you can put in a cell
 
-A number, a string, a boolean, a `Date`, `null`, or `formula(...)`.
+A number, a string, a boolean, `null`, `formula(...)`, or `date(...)`.
 
 ```ts
 sheet.set("A1", 42);
 sheet.set("A2", "text");
 sheet.set("A3", true);
-sheet.set("A4", new Date("2026-03-01"));
-sheet.set("A5", null); // blanks the cell and keeps its formatting
-sheet.set("A6", formula("SUM(A1:A4)"));
+sheet.set("A4", null); // blanks the cell and keeps its formatting
+sheet.set("A5", formula("SUM(A1:A3)"));
+sheet.set("A6", date("2026-03-01"));
+sheet.set("A7", date(2026, 3, 1, 14, 30)); // month is 1 to 12, not 0 to 11
 ```
 
 There is no error value.
@@ -365,9 +366,13 @@ An error is something a formula produces, so write `formula("NA()")` rather than
 A formula is written without its cached result, and the file asks the application to recalculate when it opens.
 So a total over cells you changed comes out right, rather than showing the number the template was saved with.
 
-One thing to watch with dates.
-A spreadsheet date has no timezone but a JavaScript `Date` is an instant, and we read it in UTC to match how the reader converts the other way.
-So `new Date("2026-03-01")` is what you want, and `new Date(2026, 2, 1)` builds local midnight, which west of UTC writes the previous day.
+**A `Date` is not accepted, and that is deliberate.**
+A cell holds a calendar date with no time zone, while a `Date` is an instant, so turning one into the other means picking a zone and either choice is wrong for somebody.
+`new Date(2026, 2, 1)` is local midnight, which west of UTC is the last day of February, and that is a silently wrong number in a report.
+So you say which day you mean, and `date` refuses anything that is not one: `date(2026, 2, 30)` is an error rather than the 2nd of March.
+
+If you already hold a `Date` and want the calendar values it has in UTC, pass `instant.toISOString()`.
+For its local values, pass its parts.
 
 ### Big exports stay small in memory
 

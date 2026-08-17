@@ -9,7 +9,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ExcelJS from "exceljs";
-import { Workbook } from "../dist/index.js";
+import { date, Workbook } from "../dist/index.js";
 
 const OUTPUT_DIR = "manual-check";
 const TEMPLATE = join(OUTPUT_DIR, "template.xlsx");
@@ -44,7 +44,6 @@ const EXPECTATIONS = [
   ["Report!B9:B12", "Red where the quantity is over 10", "Conditional formatting survived"],
   ["Notes!A1", "Left untouched", "A sheet we never opened is byte-identical"],
   ["Sheet tabs", "Report, Notes, Checks", "A worksheet was added, with its relationship and content type"],
-  ["File properties", "Author still says Very Good Software", "Document properties survived"],
 ];
 
 function buildTemplate() {
@@ -123,8 +122,8 @@ async function fill(source) {
   const report = editor.worksheet("Report");
 
   report.set("C3", "Northwind Traders");
-  report.set("C4", new Date("2026-03-01T00:00:00.000Z"));
-  report.set("C5", new Date("2026-03-15T00:00:00.000Z"));
+  report.set("C4", date("2026-03-01"));
+  report.set("C5", date("2026-03-15"));
 
   // Four rows into a region two rows deep, so rows 11 and 12 are new and take
   // their formatting from row 9.

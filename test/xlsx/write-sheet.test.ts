@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CellInput } from "../../src/cell-input";
-import { formula } from "../../src/cell-input";
+import { date, formula } from "../../src/cell-input";
 import type { DateStyles } from "../../src/xlsx/write-sheet";
 import { type RowCells, type RowEdit, type SheetWritePlan, writeSheetPart } from "../../src/xlsx/write-sheet";
 import { SaxesXmlReader } from "../../src/xml/saxes-xml-reader";
@@ -201,7 +201,7 @@ describe("writeSheetPart", () => {
     });
 
     it("writes a date as its serial with a date style", async () => {
-      expect(await written(new Date("2020-01-01T00:00:00.000Z"))).toBe(`<c r="A1" s="99"><v>43831</v></c>`);
+      expect(await written(date("2020-01-01"))).toBe(`<c r="A1" s="99"><v>43831</v></c>`);
     });
 
     it("writes a formula with no cached result, leaving the value to be recalculated", async () => {
