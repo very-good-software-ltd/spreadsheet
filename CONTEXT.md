@@ -236,6 +236,11 @@ Deleting and renaming sheets is out, for the same reason inserting rows is: both
   Untouched entries are copied as bytes and are exactly identical, checksum and compressed size included, so nothing is recompressed.
   Five parts are rewritten: the edited sheets, `xl/styles.xml`, `xl/workbook.xml`, and, only when there was a calculation chain to drop, `[Content_Types].xml` and `xl/_rels/workbook.xml.rels`.
   A rewritten part is re-emitted from the XML event stream, which does not carry attribute order, self-closing tag spelling, comments or processing instructions. So it is semantically equivalent but not byte-identical, and the byte-identity test can only cover the parts we did not touch. Whether that gap ever matters is unknown.
+- **Recalculation and the zip's shape, confirmed in Excel in the browser (desktop still open).**
+  A filled file opened in Excel in the browser with no repair prompt, and every expectation on the generated Checks sheet held.
+  So three things we could not test are no longer guesses: an entry described after its data is accepted, a sheet with no `dimension` element is accepted, and `fullCalcOnLoad` makes Excel recalculate a stale cached result.
+  Desktop Excel is a stricter implementation and has not been tried, so this is evidence rather than a closed question. `npm run manual-check` builds the file to try it with.
+  The paragraph below is what that check was originally about, kept because the desktop half is still open.
 - **Recalculation on open needs confirming against real Excel.**
   Changing a value makes every cached formula result downstream of it stale.
   The plan is to drop `xl/calcChain.xml`, which is a cache Excel rebuilds, and set `fullCalcOnLoad` so Excel recomputes on open.

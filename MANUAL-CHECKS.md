@@ -11,6 +11,22 @@ most to a user and the one nothing in CI will catch.
 Use real Excel, not LibreOffice. LibreOffice is more forgiving, so passing there
 proves less than it looks.
 
+Desktop Excel and Excel in the browser are different implementations, and the
+desktop one is stricter. Passing in the browser is real evidence but not the whole
+check, so run both if you can.
+
+
+## What has been checked so far
+
+Excel in the browser, on 2026-08-17, opened a filled file with no repair prompt
+and every expectation on the Checks sheet held. That covers the three things we
+could not prove from a test: an entry described after its data is accepted, a
+sheet with no `dimension` element is accepted, and `fullCalcOnLoad` recalculates.
+
+Two gaps remain. Desktop Excel has not been tried. And the run predates the
+template carrying a calculation chain, so the path that drops one has been
+exercised only since. Both want one more pass.
+
 
 ## Start here
 
@@ -21,8 +37,8 @@ npm run manual-check
 That writes two files into `manual-check/`:
 
 - `template.xlsx`, a made-up corporate template with a merged heading, column
-  widths, frozen panes, conditional formatting, a pre-formatted data region and a
-  total formula.
+  widths, frozen panes, conditional formatting, a pre-formatted data region, a
+  total formula and a calculation chain.
 - `filled.xlsx`, that template after this library filled it in.
 
 Open `filled.xlsx` in Excel. It has a **Checks** sheet listing every cell to look
@@ -73,9 +89,13 @@ way, which is why we expect it to pass, but expecting is not knowing.
 **The total reading 1400 rather than 0** is recalculation. The template caches a
 result of 0, which was right when it was saved and is wrong for the data we
 wrote. We drop `xl/calcChain.xml` and set `fullCalcOnLoad` in the workbook part
-to force Excel to work it out again. Dropping that part also means removing its
-content type override and its relationship, so this check covers whether we left
-anything dangling.
+to force Excel to work it out again.
+
+Dropping that part also means removing its content type override and its
+relationship, and a dangling one of either is exactly what makes Excel offer to
+repair a file. `exceljs` writes no calculation chain even for a workbook with
+formulas, so the script splices one into the template on purpose. Without it that
+whole path would never run and the check would prove nothing about it.
 
 **Rows 11 and 12 looking like rows 9 and 10** is `inheritFrom`. The template's
 formatted data region is only two rows deep and we wrote four rows into it, so
@@ -88,7 +108,8 @@ date correctly and lost the bold. **C5** is the other half: it already had a dat
 format, so we left it alone rather than adding a second one.
 
 **Nothing checks the `dimension` element directly**, because its absence has no
-visible symptom. It records the used range and sits before the row data, so a
+visible symptom. The template has one and the output does not, so opening the file
+at all is the check. It records the used range and sits before the row data, so a
 single streaming pass cannot know the final extent by the time it would have to
 be written. It is optional in the schema, so we leave it out. If scrolling to the
 end of a written sheet behaves oddly, or Excel's used-range shortcuts land in the

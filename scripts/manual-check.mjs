@@ -9,11 +9,16 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ExcelJS from "exceljs";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { date, Workbook } from "../dist/index.js";
 
 const OUTPUT_DIR = "manual-check";
 const TEMPLATE = join(OUTPUT_DIR, "template.xlsx");
 const FILLED = join(OUTPUT_DIR, "filled.xlsx");
+
+const MAIN_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+const SPREADSHEET_TYPES = "application/vnd.openxmlformats-officedocument.spreadsheetml";
+const CALC_CHAIN_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/calcChain";
 
 const HEADER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9E7FF" } };
 const THIN_BORDER = { style: "thin", color: { argb: "FF999999" } };
@@ -46,7 +51,7 @@ const EXPECTATIONS = [
   ["Sheet tabs", "Report, Notes, Checks", "A worksheet was added, with its relationship and content type"],
 ];
 
-function buildTemplate() {
+async function buildTemplate() {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = "Very Good Software";
 
@@ -114,7 +119,34 @@ function buildTemplate() {
   const notes = workbook.addWorksheet("Notes");
   notes.getCell("A1").value = "This sheet is never opened by the fill, so every byte of it should survive.";
 
-  return workbook.xlsx.writeBuffer();
+  return withCalculationChain(new Uint8Array(await workbook.xlsx.writeBuffer()));
+}
+
+// exceljs writes no calculation chain even for a workbook with formulas, so the
+// path that drops one, along with its content type override and its relationship,
+// would never be exercised. Excel does write one, so a real template has it, and
+// leaving a dangling override or relationship behind is exactly the kind of thing
+// that makes Excel offer to repair a file. Splicing one in gets that path covered.
+function withCalculationChain(bytes) {
+  const parts = unzipSync(bytes);
+
+  parts["xl/calcChain.xml"] = strToU8(
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><calcChain xmlns="${MAIN_NAMESPACE}"><c r="C13" i="1"/></calcChain>`,
+  );
+  parts["[Content_Types].xml"] = strToU8(
+    strFromU8(parts["[Content_Types].xml"]).replace(
+      "</Types>",
+      `<Override PartName="/xl/calcChain.xml" ContentType="${SPREADSHEET_TYPES}.calcChain+xml"/></Types>`,
+    ),
+  );
+  parts["xl/_rels/workbook.xml.rels"] = strToU8(
+    strFromU8(parts["xl/_rels/workbook.xml.rels"]).replace(
+      "</Relationships>",
+      `<Relationship Id="rIdCalcChain" Type="${CALC_CHAIN_RELATIONSHIP}" Target="calcChain.xml"/></Relationships>`,
+    ),
+  );
+
+  return zipSync(parts);
 }
 
 async function fill(source) {
@@ -163,7 +195,7 @@ mkdirSync(OUTPUT_DIR, { recursive: true });
 
 const provided = existsSync(TEMPLATE);
 if (!provided) {
-  writeFileSync(TEMPLATE, Buffer.from(await buildTemplate()));
+  writeFileSync(TEMPLATE, await buildTemplate());
 }
 
 const source = readFileSync(TEMPLATE);
