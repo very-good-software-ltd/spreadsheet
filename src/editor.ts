@@ -46,6 +46,14 @@ export interface Editor {
   worksheet(nameOrIndex: string | number): WorksheetEditor;
 
   /**
+   * Add an empty worksheet after the ones already there, and return its editor.
+   *
+   * Throws straight away if the name is already taken or is not one a spreadsheet
+   * will accept.
+   */
+  addWorksheet(name: string): WorksheetEditor;
+
+  /**
    * The edited workbook as a stream of bytes. Row sources are read as it drains,
    * so nothing is held.
    *

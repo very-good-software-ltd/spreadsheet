@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
+import type { AddedWorksheet } from "../../src/xlsx/write-package";
 import {
+  asPart,
+  flatten,
+  withAddedContentTypes,
+  withAddedRelationships,
+  withAddedSheets,
   withoutContentTypeOverride,
   withoutRelationshipTo,
   withRecalculationOnLoad,
 } from "../../src/xlsx/write-package";
 import { SaxesXmlReader } from "../../src/xml/saxes-xml-reader";
 import { XML_DECLARATION } from "../../src/xml/write-xml";
+import type { XmlEvent } from "../../src/xml/xml-reader";
 
 function streamOf(text: string): ReadableStream<Uint8Array> {
   const bytes = new TextEncoder().encode(text);
@@ -17,13 +24,24 @@ function streamOf(text: string): ReadableStream<Uint8Array> {
   });
 }
 
-async function run(xml: string, transform: (events: never) => AsyncIterable<string>): Promise<string> {
-  const events = new SaxesXmlReader().read(streamOf(xml)) as never;
+type Transform = (events: AsyncIterable<XmlEvent>) => AsyncIterable<XmlEvent>;
+
+async function run(xml: string, transform: Transform): Promise<string> {
+  const events = flatten(new SaxesXmlReader().read(streamOf(xml)));
   let out = "";
-  for await (const chunk of transform(events)) {
+  for await (const chunk of asPart(transform(events))) {
     out += chunk;
   }
   return out.slice(XML_DECLARATION.length);
+}
+
+function added(name: string, number: number): AddedWorksheet {
+  return {
+    name,
+    path: `xl/worksheets/sheet${number}.xml`,
+    relationshipId: `rId${number}`,
+    sheetId: number,
+  };
 }
 
 const WORKBOOK_OPEN = `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">`;
@@ -78,7 +96,9 @@ describe("withoutContentTypeOverride", () => {
   const types = `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"></Default><Override PartName="/xl/calcChain.xml" ContentType="calcChain"></Override><Override PartName="/xl/styles.xml" ContentType="styles"></Override></Types>`;
 
   it("drops the override naming the part", async () => {
-    const result = await run(types, (events) => withoutContentTypeOverride(events, "/xl/calcChain.xml"));
+    const result = await run(types, (events: AsyncIterable<XmlEvent>) =>
+      withoutContentTypeOverride(events, "/xl/calcChain.xml"),
+    );
 
     expect(result).not.toContain("calcChain");
     expect(result).toContain(`<Override PartName="/xl/styles.xml" ContentType="styles"></Override>`);
@@ -102,5 +122,59 @@ describe("withoutRelationshipTo", () => {
 
   it("leaves the part alone when nothing points there", async () => {
     expect(await run(rels, (events) => withoutRelationshipTo(events, "nothing.xml"))).toBe(rels);
+  });
+});
+
+describe("withAddedSheets", () => {
+  it("adds the sheet to the end of the list", async () => {
+    const xml = `${WORKBOOK_OPEN}<sheets><sheet name="One" sheetId="1" r:id="rId1"></sheet></sheets></workbook>`;
+
+    const result = await run(xml, (events) => withAddedSheets(events, [added("Two", 2)]));
+
+    expect(result).toContain(
+      `<sheet name="One" sheetId="1" r:id="rId1"></sheet><sheet name="Two" sheetId="2" r:id="rId2"></sheet></sheets>`,
+    );
+  });
+
+  it("adds a sheets list to a workbook that has none", async () => {
+    const result = await run(`${WORKBOOK_OPEN}</workbook>`, (events) => withAddedSheets(events, [added("One", 1)]));
+
+    expect(result).toContain(`<sheet name="One" sheetId="1" r:id="rId1"></sheet>`);
+  });
+});
+
+describe("withAddedRelationships", () => {
+  it("points the workbook at the new part, relative to the workbook's own folder", async () => {
+    const xml = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`;
+
+    const result = await run(xml, (events) => withAddedRelationships(events, [added("Two", 3)]));
+
+    expect(result).toContain(`Target="worksheets/sheet3.xml"`);
+    expect(result).toContain(`Id="rId3"`);
+    expect(result).toContain("relationships/worksheet");
+  });
+});
+
+describe("withAddedContentTypes", () => {
+  it("declares the new part's content type by absolute path", async () => {
+    const xml = `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"></Types>`;
+
+    const result = await run(xml, (events) => withAddedContentTypes(events, [added("Two", 3)]));
+
+    expect(result).toContain(`PartName="/xl/worksheets/sheet3.xml"`);
+    expect(result).toContain("spreadsheetml.worksheet+xml");
+  });
+});
+
+describe("composing the transforms", () => {
+  it("applies more than one to the same part", async () => {
+    const xml = `<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Override PartName="/xl/calcChain.xml" ContentType="calcChain"></Override></Types>`;
+
+    const result = await run(xml, (events) =>
+      withAddedContentTypes(withoutContentTypeOverride(events, "/xl/calcChain.xml"), [added("Two", 2)]),
+    );
+
+    expect(result).not.toContain("calcChain");
+    expect(result).toContain(`PartName="/xl/worksheets/sheet2.xml"`);
   });
 });

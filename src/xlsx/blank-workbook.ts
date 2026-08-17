@@ -11,7 +11,7 @@ import type { ZipArchive } from "../zip/zip-archive";
 // that path never has to create one, along with its content type override and its
 // relationship.
 
-const MAIN_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+export const MAIN_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const PACKAGE_RELATIONSHIPS_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/relationships";
 const CONTENT_TYPES_NAMESPACE = "http://schemas.openxmlformats.org/package/2006/content-types";

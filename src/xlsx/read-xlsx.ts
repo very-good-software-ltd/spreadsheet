@@ -12,7 +12,8 @@ import { readWorkbook } from "./read-workbook";
 
 export async function readXlsx(archive: ZipArchive): Promise<WorkbookData> {
   const xml = createXmlReader();
-  const { worksheets: refs, date1904 } = await readWorkbook(archive, xml);
+  const info = await readWorkbook(archive, xml);
+  const { worksheets: refs, date1904 } = info;
   const sharedStrings = await readSharedStrings(archive, xml);
   const styles = await readStyles(archive, xml);
   const context: CellContext = { sharedStrings, styles, date1904 };
@@ -21,7 +22,7 @@ export async function readXlsx(archive: ZipArchive): Promise<WorkbookData> {
   return {
     worksheets,
     edit(): Editor {
-      return new XlsxEditor(archive, refs, styles, date1904);
+      return new XlsxEditor(archive, info, styles);
     },
     openRows(index: number): AsyncIterable<Row> {
       const ref = refs[index];

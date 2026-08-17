@@ -248,6 +248,82 @@ describe("editing an xlsx", () => {
     });
   });
 
+  describe("adding a worksheet", () => {
+    it("adds a sheet a reader then finds", async () => {
+      const workbook = await Workbook.create();
+      const editor = workbook.edit();
+
+      editor.addWorksheet("Summary").set("A1", "total");
+      const bytes = await bytesOf(editor.save());
+
+      expect((await Workbook.open(bytes)).worksheetNames).toEqual(["Sheet1", "Summary"]);
+      expect(await cellsOf(bytes, "Summary")).toEqual([["total"]]);
+      expect(await cellsOf(bytes, "Sheet1")).toEqual([]);
+    });
+
+    it("adds it to a workbook opened from a file, keeping the sheets already there", async () => {
+      const source = xlsx([{ name: "Data", rows: [["a"]] }]);
+      const editor = (await Workbook.open(source)).edit();
+
+      editor.addWorksheet("Extra").set("A1", "b");
+      const bytes = await bytesOf(editor.save());
+
+      expect((await Workbook.open(bytes)).worksheetNames).toEqual(["Data", "Extra"]);
+      expect(await cellsOf(bytes, "Data")).toEqual([["a"]]);
+      expect(await cellsOf(bytes, "Extra")).toEqual([["b"]]);
+    });
+
+    it("adds more than one at a time", async () => {
+      const editor = (await Workbook.create()).edit();
+
+      editor.addWorksheet("Two");
+      editor.addWorksheet("Three");
+
+      expect((await Workbook.open(await bytesOf(editor.save()))).worksheetNames).toEqual(["Sheet1", "Two", "Three"]);
+    });
+
+    it("takes a part path and a relationship id nothing else is using", async () => {
+      const editor = (await Workbook.open(xlsx([{ name: "One", rows: [] }]))).edit();
+
+      editor.addWorksheet("Two");
+      const bytes = await bytesOf(editor.save());
+      const archive = await openZip(new BytesByteRange(bytes));
+
+      expect(archive.has("xl/worksheets/sheet2.xml")).toBe(true);
+
+      const rels = strFromU8(await archive.read("xl/_rels/workbook.xml.rels"));
+      expect(rels.match(/Id="rId1"/g)).toHaveLength(1);
+      expect(rels).toContain('Target="worksheets/sheet2.xml"');
+    });
+
+    it("declares the new part's content type, so a reader knows what it is", async () => {
+      const editor = (await Workbook.create()).edit();
+
+      editor.addWorksheet("Two");
+      const archive = await openZip(new BytesByteRange(await bytesOf(editor.save())));
+
+      expect(strFromU8(await archive.read("[Content_Types].xml"))).toContain('PartName="/xl/worksheets/sheet2.xml"');
+    });
+
+    it("refuses a name a spreadsheet would not accept", async () => {
+      const editor = (await Workbook.create()).edit();
+
+      expect(() => editor.addWorksheet("")).toThrow(/not a worksheet name/i);
+      expect(() => editor.addWorksheet("x".repeat(32))).toThrow(/not a worksheet name/i);
+      expect(() => editor.addWorksheet("a/b")).toThrow(/cannot appear/i);
+      expect(() => editor.addWorksheet("a:b")).toThrow(/cannot appear/i);
+      expect(() => editor.addWorksheet("[a]")).toThrow(/cannot appear/i);
+      expect(() => editor.addWorksheet("'quoted'")).toThrow(/cannot appear/i);
+    });
+
+    it("refuses a name already taken, whatever its case", async () => {
+      const editor = (await Workbook.create()).edit();
+
+      expect(() => editor.addWorksheet("Sheet1")).toThrow(/already exists/i);
+      expect(() => editor.addWorksheet("sheet1")).toThrow(/already exists/i);
+    });
+  });
+
   it("keeps every part it did not touch", async () => {
     const source = xlsx([{ name: "Data", rows: [["a"]] }]);
     const workbook = await Workbook.open(source);

@@ -13,6 +13,7 @@ const Element = {
 const Attribute = {
   Date1904: "date1904",
   Name: "name",
+  SheetId: "sheetId",
   RelationshipId: "r:id",
   State: "state",
 } as const;
@@ -25,11 +26,17 @@ export interface WorksheetRef {
   readonly name: string;
   readonly path: string;
   readonly hidden: boolean;
+
+  /** The workbook-wide identifier, distinct from the position and the path. */
+  readonly sheetId: number;
 }
 
 export interface WorkbookInfo {
   readonly worksheets: readonly WorksheetRef[];
   readonly date1904: boolean;
+
+  /** Every relationship id the part already uses, so a new one can avoid them. */
+  readonly relationshipIds: readonly string[];
 }
 
 export async function readWorkbook(archive: ZipArchive, xml: XmlReader): Promise<WorkbookInfo> {
@@ -57,10 +64,11 @@ export async function readWorkbook(archive: ZipArchive, xml: XmlReader): Promise
         const relId = event.attributes[Attribute.RelationshipId];
         const path = relId === undefined ? undefined : relationships.get(relId);
         const hidden = HIDDEN_STATES.has(event.attributes[Attribute.State] ?? "");
-        worksheets.push({ name, path: path ?? "", hidden });
+        const sheetId = Number(event.attributes[Attribute.SheetId] ?? "0");
+        worksheets.push({ name, path: path ?? "", hidden, sheetId });
       }
     }
   }
 
-  return { worksheets, date1904 };
+  return { worksheets, date1904, relationshipIds: [...relationships.keys()] };
 }

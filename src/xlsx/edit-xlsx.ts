@@ -5,10 +5,21 @@ import { createXmlReader } from "../xml/create-xml-reader";
 import type { XmlEvent, XmlReader } from "../xml/xml-reader";
 import { createZipWriter } from "../zip/create-zip-writer";
 import type { ZipArchive } from "../zip/zip-archive";
+import { MAIN_NAMESPACE } from "./blank-workbook";
 import { type CellEdit, mergeRowEdits, type RowBlock } from "./merge-row-edits";
 import type { Styles } from "./read-styles";
-import type { WorksheetRef } from "./read-workbook";
-import { withoutContentTypeOverride, withoutRelationshipTo, withRecalculationOnLoad } from "./write-package";
+import type { WorkbookInfo } from "./read-workbook";
+import {
+  type AddedWorksheet,
+  asPart,
+  flatten,
+  withAddedContentTypes,
+  withAddedRelationships,
+  withAddedSheets,
+  withoutContentTypeOverride,
+  withoutRelationshipTo,
+  withRecalculationOnLoad,
+} from "./write-package";
 import { writeSheetPart } from "./write-sheet";
 import { DateStyleTable, writeStylesPart } from "./write-styles";
 
@@ -27,9 +38,14 @@ const CALCULATION_CHAIN_TARGET = "calcChain.xml";
 
 const CELL_REFERENCE = /^[A-Z]{1,3}[1-9][0-9]*$/;
 
-// The last row and column a worksheet can hold.
+// The last row and column a worksheet can hold, and the longest a name can be.
 const MAX_ROW = 1_048_576;
 const MAX_COLUMN_INDEX = 16_383;
+const MAX_WORKSHEET_NAME_LENGTH = 31;
+
+// A formula refers to a sheet by name, wrapping it in single quotes when it needs
+// to, so none of these can appear in one.
+const FORBIDDEN_IN_WORKSHEET_NAME = /[:\\/?*[\]]/;
 
 interface SheetEdits {
   readonly cells: CellEdit[];
@@ -37,31 +53,57 @@ interface SheetEdits {
   readonly appended: RowSource[];
 }
 
+interface Target {
+  readonly name: string;
+  readonly path: string;
+  readonly added: boolean;
+}
+
 export class XlsxEditor implements Editor {
+  private readonly targets: Target[];
   private readonly edits = new Map<number, SheetEdits>();
+  private readonly added: AddedWorksheet[] = [];
+  private readonly takenRelationshipIds: Set<string>;
   private readonly xml: XmlReader = createXmlReader();
+  private nextSheetId: number;
   private calls = 0;
   private saved = false;
 
   constructor(
     private readonly archive: ZipArchive,
-    private readonly worksheets: readonly WorksheetRef[],
+    private readonly workbook: WorkbookInfo,
     private readonly styles: Styles,
-    private readonly date1904: boolean,
-  ) {}
+  ) {
+    this.targets = workbook.worksheets.map((sheet) => ({ name: sheet.name, path: sheet.path, added: false }));
+    this.takenRelationshipIds = new Set(workbook.relationshipIds);
+    this.nextSheetId = Math.max(0, ...workbook.worksheets.map((sheet) => sheet.sheetId)) + 1;
+  }
 
   worksheet(nameOrIndex: string | number): WorksheetEditor {
     const index =
-      typeof nameOrIndex === "number" ? nameOrIndex : this.worksheets.findIndex((sheet) => sheet.name === nameOrIndex);
+      typeof nameOrIndex === "number" ? nameOrIndex : this.targets.findIndex((sheet) => sheet.name === nameOrIndex);
 
-    if (index < 0 || index >= this.worksheets.length) {
+    if (index < 0 || index >= this.targets.length) {
       throw new Error(`Worksheet not found: ${nameOrIndex}`);
     }
 
-    return new XlsxWorksheetEditor(this.editsFor(index), () => {
-      this.calls += 1;
-      return this.calls;
-    });
+    return this.editorFor(index);
+  }
+
+  addWorksheet(name: string): WorksheetEditor {
+    this.checkWorksheetName(name);
+
+    const sheet: AddedWorksheet = {
+      name,
+      path: this.freeWorksheetPath(),
+      relationshipId: this.freeRelationshipId(),
+      sheetId: this.nextSheetId,
+    };
+    this.nextSheetId += 1;
+    this.added.push(sheet);
+    this.targets.push({ name, path: sheet.path, added: true });
+
+    return this.editorFor(this.targets.length - 1);
   }
 
   save(): ReadableStream<Uint8Array> {
@@ -74,40 +116,13 @@ export class XlsxEditor implements Editor {
 
     const dateStyles = new DateStyleTable(this.styles);
     const writer = createZipWriter();
-    const encoder = new TextEncoder();
-    const text = (chunks: () => AsyncIterable<string>) =>
-      async function* (): AsyncIterable<Uint8Array> {
-        for await (const chunk of chunks()) {
-          yield encoder.encode(chunk);
-        }
-      };
+    const part = (path: string): AsyncIterable<XmlEvent> => flatten(this.xml.read(this.archive.openStream(path)));
 
-    const edited = [...this.edits].filter(([, edits]) => hasEdits(edits));
-    const editedPaths = new Set(edited.map(([index]) => (this.worksheets[index] as WorksheetRef).path));
-    const hadCalculationChain = this.archive.has(CALCULATION_CHAIN_PART);
+    const rewritten = this.packageParts(part);
+    const sheets = this.sheetParts(dateStyles);
 
-    const part = (path: string): AsyncIterable<readonly XmlEvent[]> => this.xml.read(this.archive.openStream(path));
-
-    // Rewritten rather than copied, so the parts a reader needs to agree with
-    // each other still do.
-    const rewritten = new Map<string, () => AsyncIterable<string>>([
-      [WORKBOOK_PART, () => withRecalculationOnLoad(part(WORKBOOK_PART))],
-    ]);
-
-    if (hadCalculationChain) {
-      rewritten.set(CONTENT_TYPES_PART, () =>
-        withoutContentTypeOverride(part(CONTENT_TYPES_PART), `/${CALCULATION_CHAIN_PART}`),
-      );
-      rewritten.set(WORKBOOK_RELATIONSHIPS_PART, () =>
-        withoutRelationshipTo(part(WORKBOOK_RELATIONSHIPS_PART), CALCULATION_CHAIN_TARGET),
-      );
-    }
-
-    // The styles part is declared last on purpose. A date only learns which cell
-    // format it needs while its sheet is written, so the part has to be produced
-    // after every sheet that might add one.
     for (const entry of this.archive.entries()) {
-      if (entry.path === STYLES_PART || editedPaths.has(entry.path) || entry.path === CALCULATION_CHAIN_PART) {
+      if (entry.path === STYLES_PART || sheets.has(entry.path) || entry.path === CALCULATION_CHAIN_PART) {
         continue;
       }
 
@@ -115,47 +130,122 @@ export class XlsxEditor implements Editor {
       if (rewrite === undefined) {
         writer.copy(this.archive.storedEntry(entry.path));
       } else {
-        writer.add(entry.path, text(rewrite));
+        writer.add(entry.path, encoded(rewrite));
       }
     }
 
-    for (const [index, edits] of edited) {
-      const ref = this.worksheets[index] as WorksheetRef;
-      writer.add(
-        ref.path,
-        text(() =>
-          writeSheetPart(
-            part(ref.path),
-            {
-              positioned: mergeRowEdits(edits.cells, edits.blocks),
-              appended: appendedRows(edits.appended),
-            },
-            { dateStyles, date1904: this.date1904 },
-          ),
-        ),
-      );
+    for (const [path, content] of sheets) {
+      writer.add(path, encoded(content));
     }
 
+    // The styles part is declared last on purpose. A date only learns which cell
+    // format it needs while its sheet is written, so the part has to be produced
+    // after every sheet that might add one.
     if (this.archive.has(STYLES_PART)) {
       writer.add(
         STYLES_PART,
-        text(() => writeStylesPart(part(STYLES_PART), dateStyles)),
+        encoded(() => writeStylesPart(this.xml.read(this.archive.openStream(STYLES_PART)), dateStyles)),
       );
     }
 
     return writer.open();
   }
 
-  private editsFor(index: number): SheetEdits {
-    const existing = this.edits.get(index);
-    if (existing !== undefined) {
-      return existing;
+  // The parts that describe the package rather than hold data. Each is rewritten
+  // only when something about it has to change, so the rest stay byte-identical.
+  private packageParts(part: (path: string) => AsyncIterable<XmlEvent>): Map<string, () => AsyncIterable<string>> {
+    const droppingChain = this.archive.has(CALCULATION_CHAIN_PART);
+    const rewritten = new Map<string, () => AsyncIterable<string>>();
+
+    rewritten.set(WORKBOOK_PART, () =>
+      asPart(withAddedSheets(withRecalculationOnLoad(part(WORKBOOK_PART)), this.added)),
+    );
+
+    if (!droppingChain && this.added.length === 0) {
+      return rewritten;
     }
 
-    const created: SheetEdits = { cells: [], blocks: [], appended: [] };
-    this.edits.set(index, created);
+    rewritten.set(CONTENT_TYPES_PART, () => {
+      const source = part(CONTENT_TYPES_PART);
+      const trimmed = droppingChain ? withoutContentTypeOverride(source, `/${CALCULATION_CHAIN_PART}`) : source;
+      return asPart(withAddedContentTypes(trimmed, this.added));
+    });
 
-    return created;
+    rewritten.set(WORKBOOK_RELATIONSHIPS_PART, () => {
+      const source = part(WORKBOOK_RELATIONSHIPS_PART);
+      const trimmed = droppingChain ? withoutRelationshipTo(source, CALCULATION_CHAIN_TARGET) : source;
+      return asPart(withAddedRelationships(trimmed, this.added));
+    });
+
+    return rewritten;
+  }
+
+  private sheetParts(dateStyles: DateStyleTable): Map<string, () => AsyncIterable<string>> {
+    const parts = new Map<string, () => AsyncIterable<string>>();
+
+    for (const [index, target] of this.targets.entries()) {
+      const edits = this.edits.get(index);
+
+      if (!target.added && (edits === undefined || !hasEdits(edits))) {
+        continue;
+      }
+
+      parts.set(target.path, () =>
+        writeSheetPart(
+          target.added ? emptyWorksheet() : this.xml.read(this.archive.openStream(target.path)),
+          {
+            positioned: mergeRowEdits(edits?.cells ?? [], edits?.blocks ?? []),
+            appended: appendedRows(edits?.appended ?? []),
+          },
+          { dateStyles, date1904: this.workbook.date1904 },
+        ),
+      );
+    }
+
+    return parts;
+  }
+
+  private editorFor(index: number): WorksheetEditor {
+    const edits = this.edits.get(index) ?? { cells: [], blocks: [], appended: [] };
+    this.edits.set(index, edits);
+
+    return new XlsxWorksheetEditor(edits, () => {
+      this.calls += 1;
+      return this.calls;
+    });
+  }
+
+  private checkWorksheetName(name: string): void {
+    if (name === "" || name.length > MAX_WORKSHEET_NAME_LENGTH) {
+      throw new Error(`Not a worksheet name: "${name}". A name is 1 to ${MAX_WORKSHEET_NAME_LENGTH} characters`);
+    }
+    if (FORBIDDEN_IN_WORKSHEET_NAME.test(name) || name.startsWith("'") || name.endsWith("'")) {
+      throw new Error(
+        `Not a worksheet name: "${name}". A formula refers to a sheet by name, so : \\ / ? * [ ] and a surrounding quote cannot appear in one`,
+      );
+    }
+    if (this.targets.some((sheet) => sheet.name.toLowerCase() === name.toLowerCase())) {
+      throw new Error(`Worksheet already exists: "${name}"`);
+    }
+  }
+
+  private freeWorksheetPath(): string {
+    for (let number = 1; ; number += 1) {
+      const path = `xl/worksheets/sheet${number}.xml`;
+      if (!this.archive.has(path) && !this.targets.some((sheet) => sheet.path === path)) {
+        return path;
+      }
+    }
+  }
+
+  private freeRelationshipId(): string {
+    for (let number = 1; ; number += 1) {
+      const id = `rId${number}`;
+      if (!this.takenRelationshipIds.has(id)) {
+        this.takenRelationshipIds.add(id);
+        return id;
+      }
+    }
   }
 }
 
@@ -211,6 +301,27 @@ class XlsxWorksheetEditor implements WorksheetEditor {
 
 function hasEdits(edits: SheetEdits): boolean {
   return edits.cells.length > 0 || edits.blocks.length > 0 || edits.appended.length > 0;
+}
+
+function encoded(chunks: () => AsyncIterable<string>): () => AsyncIterable<Uint8Array> {
+  const encoder = new TextEncoder();
+
+  return async function* (): AsyncIterable<Uint8Array> {
+    for await (const chunk of chunks()) {
+      yield encoder.encode(chunk);
+    }
+  };
+}
+
+// A sheet being added has no source part to transform, so it starts as the events
+// an empty one would have produced and goes through the same writer.
+async function* emptyWorksheet(): AsyncIterable<readonly XmlEvent[]> {
+  yield [
+    { type: "open", name: "worksheet", attributes: { xmlns: MAIN_NAMESPACE } },
+    { type: "open", name: "sheetData", attributes: {} },
+    { type: "close", name: "sheetData" },
+    { type: "close", name: "worksheet" },
+  ];
 }
 
 async function* appendedRows(sources: readonly RowSource[]): AsyncIterable<ReadonlyMap<number, CellInput>> {
