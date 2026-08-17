@@ -34,6 +34,7 @@ function plan(positioned: readonly RowEdit[] = [], appended: readonly RowCells[]
     appended: (async function* () {
       yield* appended;
     })(),
+    inheritedRows: new Set(positioned.flatMap((edit) => (edit.inheritFrom === undefined ? [] : [edit.inheritFrom]))),
   };
 }
 
@@ -153,6 +154,34 @@ describe("writeSheetPart", () => {
     expect(result).toContain(
       `<row r="7" ht="24" customHeight="1"><c r="A7" s="11"><v>1</v></c><c r="B7" s="12"><v>2</v></c></row>`,
     );
+  });
+
+  it("copies formatting from a row that is itself being written", async () => {
+    const sheet = `${SHEET_OPEN}<sheetData><row r="9"><c r="A9" s="11"></c></row><row r="10"><c r="A10"></c></row></sheetData></worksheet>`;
+
+    const result = await rewrite(
+      sheet,
+      plan([
+        { number: 9, cells: cells(["nine"]) },
+        { number: 10, cells: cells(["ten"]), inheritFrom: 9 },
+      ]),
+    );
+
+    expect(result).toContain(`<c r="A10" s="11" t="inlineStr"><is><t>ten</t></is></c>`);
+  });
+
+  it("copies formatting from a row well before the one being written", async () => {
+    const sheet = `${SHEET_OPEN}<sheetData><row r="9"><c r="A9" s="11"></c></row><row r="50"><c r="A50"></c></row></sheetData></worksheet>`;
+
+    const result = await rewrite(sheet, plan([{ number: 20, cells: cells(["twenty"]), inheritFrom: 9 }]));
+
+    expect(result).toContain(`<c r="A20" s="11" t="inlineStr"><is><t>twenty</t></is></c>`);
+  });
+
+  it("refuses to copy formatting from a row the sheet does not have", async () => {
+    const sheet = `${SHEET_OPEN}<sheetData><row r="1"><c r="A1"></c></row></sheetData></worksheet>`;
+
+    await expect(rewrite(sheet, plan([{ number: 20, cells: cells([1]), inheritFrom: 9 }]))).rejects.toThrow(/row 9/i);
   });
 
   it("prefers a cell's own style over an inherited one", async () => {

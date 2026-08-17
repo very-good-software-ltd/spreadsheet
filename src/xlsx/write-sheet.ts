@@ -51,6 +51,13 @@ export interface SheetWritePlan {
 
   /** Rows to place after the last row the sheet already has, in order. */
   readonly appended: AsyncIterable<RowCells>;
+
+  /**
+   * Every row number some edit copies formatting from. The sheet is read once, so
+   * a row has to be recognised as worth holding while it goes past, which cannot
+   * be worked out from the edits alone because they are read lazily.
+   */
+  readonly inheritedRows: ReadonlySet<number>;
 }
 
 /** Supplies a style index whose number format renders a date. */
@@ -103,8 +110,20 @@ export async function* writeSheetPart(
   let lastRowNumber = 0;
   let rowsClosed = false;
 
-  const write = (edit: RowEdit, source: SourceRow | undefined): string =>
-    writeRow(edit, source, edit.inheritFrom === undefined ? undefined : inheritable.get(edit.inheritFrom), context);
+  const write = (edit: RowEdit, source: SourceRow | undefined): string => {
+    if (edit.inheritFrom === undefined) {
+      return writeRow(edit, source, undefined, context);
+    }
+
+    const inherited = inheritable.get(edit.inheritFrom);
+    if (inherited === undefined) {
+      throw new Error(
+        `Cannot copy formatting from row ${edit.inheritFrom} onto row ${edit.number}: the sheet has no row ${edit.inheritFrom}`,
+      );
+    }
+
+    return writeRow(edit, source, inherited, context);
+  };
 
   for await (const piece of parseSheet(events)) {
     if (piece.kind === "prologue") {
@@ -119,11 +138,12 @@ export async function* writeSheetPart(
         yield write(edit, undefined);
       }
 
-      const next = await positioned.peek();
-      if (next?.inheritFrom === row.number) {
+      // Held before the row is written, so a row can be the one it copies from.
+      if (plan.inheritedRows.has(row.number)) {
         inheritable.set(row.number, row);
       }
 
+      const next = await positioned.peek();
       if (next !== undefined && next.number === row.number) {
         await positioned.drop();
         yield write(next, row);

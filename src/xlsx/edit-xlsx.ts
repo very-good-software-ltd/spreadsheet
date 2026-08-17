@@ -196,6 +196,7 @@ export class XlsxEditor implements Editor {
           {
             positioned: mergeRowEdits(edits?.cells ?? [], edits?.blocks ?? []),
             appended: appendedRows(edits?.appended ?? []),
+            inheritedRows: inheritedRows(edits?.blocks ?? []),
           },
           { dateStyles, date1904: this.workbook.date1904 },
         ),
@@ -297,6 +298,12 @@ class XlsxWorksheetEditor implements WorksheetEditor {
 
     return this;
   }
+}
+
+// Every block declares which row it copies formatting from up front, even though
+// its rows are only read at save, so the sheet reader knows what to hold on to.
+function inheritedRows(blocks: readonly RowBlock[]): ReadonlySet<number> {
+  return new Set(blocks.flatMap((block) => (block.inheritFrom === undefined ? [] : [block.inheritFrom])));
 }
 
 function hasEdits(edits: SheetEdits): boolean {

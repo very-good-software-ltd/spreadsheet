@@ -366,6 +366,14 @@ describe("editing an xlsx", () => {
       expect(() => sheet.writeRows(5, [[1]], { inheritFrom: 9 })).toThrow(/read once from the top/i);
     });
 
+    it("says which row is missing when asked to copy formatting from one that is not there", async () => {
+      const editor = (await Workbook.open(xlsx([{ name: "Data", rows: [["a"]] }]))).edit();
+
+      editor.worksheet(0).writeRows(20, [["b"]], { inheritFrom: 9 });
+
+      await expect(bytesOf(editor.save())).rejects.toThrow(/no row 9/i);
+    });
+
     it("refuses to save twice, since a row source is read once", async () => {
       const editor = (await Workbook.create()).edit();
 
