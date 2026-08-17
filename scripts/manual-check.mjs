@@ -1,0 +1,181 @@
+// Produces the pair of files the manual checks in MANUAL-CHECKS.md need: a
+// template, and that template filled in by this library. Open the filled one in
+// Excel and work down its "Checks" sheet, which lists what to look at and what
+// you should see.
+//
+// Drop your own file at manual-check/template.xlsx and it is used instead of the
+// generated one. Do that for the checks nothing here can cover, charts and pivot
+// tables, which exceljs cannot write.
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import ExcelJS from "exceljs";
+import { Workbook } from "../dist/index.js";
+
+const OUTPUT_DIR = "manual-check";
+const TEMPLATE = join(OUTPUT_DIR, "template.xlsx");
+const FILLED = join(OUTPUT_DIR, "filled.xlsx");
+
+const HEADER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD9E7FF" } };
+const THIN_BORDER = { style: "thin", color: { argb: "FF999999" } };
+const BORDERED = { top: THIN_BORDER, left: THIN_BORDER, bottom: THIN_BORDER, right: THIN_BORDER };
+
+// What the filled file should look like once Excel has opened it. Written into
+// the output as its own sheet, so the file carries its own checklist.
+const EXPECTATIONS = [
+  ["Where", "What you should see", "Why it matters"],
+  ["The file itself", "Opens with no repair prompt", "An entry described after its data is accepted"],
+  ["Report!C3", "Northwind Traders", "A plain value was written"],
+  ["Report!C4", "2026-03-01, and still bold", "A date cloned the cell's format instead of replacing it"],
+  ["Report!C5", "15/03/2026", "A cell already formatted as a date kept its own format"],
+  ["Report!C13", "1400, not 0", "Every formula recalculated on open"],
+  [
+    "Report rows 9 and 10",
+    "Filled in, borders and 1,234.00 amounts unchanged",
+    "Rows written over the template's formatted region kept it",
+  ],
+  [
+    "Report rows 11 and 12",
+    "Bordered and formatted the same as rows 9 and 10",
+    "Rows past the formatted region inherited its formatting",
+  ],
+  ["Report!A1:C1", "One merged blue heading", "A merged range survived"],
+  ["Report column A", "Wider than the others", "Column widths survived"],
+  ["Report row 8", "Still frozen when you scroll", "Frozen panes survived"],
+  ["Report!B9:B12", "Red where the quantity is over 10", "Conditional formatting survived"],
+  ["Notes!A1", "Left untouched", "A sheet we never opened is byte-identical"],
+  ["Sheet tabs", "Report, Notes, Checks", "A worksheet was added, with its relationship and content type"],
+  ["File properties", "Author still says Very Good Software", "Document properties survived"],
+];
+
+function buildTemplate() {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = "Very Good Software";
+
+  const report = workbook.addWorksheet("Report");
+  report.views = [{ state: "frozen", ySplit: 8 }];
+  report.getColumn(1).width = 34;
+  report.getColumn(2).width = 10;
+  report.getColumn(3).width = 16;
+
+  report.mergeCells("A1:C1");
+  report.getCell("A1").value = "ACME Consulting";
+  report.getCell("A1").font = { bold: true, size: 14 };
+  report.getCell("A1").fill = HEADER_FILL;
+
+  report.getCell("A3").value = "Client";
+  report.getCell("A4").value = "Issued";
+  report.getCell("A5").value = "Due";
+
+  // C4 is bold with no number format, so writing a date has to derive a format
+  // and keep the bold. C5 already has one, so writing a date has to leave it be.
+  report.getCell("C4").font = { bold: true };
+  report.getCell("C5").numFmt = "dd/mm/yyyy";
+
+  for (const [column, heading] of [
+    ["A", "Item"],
+    ["B", "Qty"],
+    ["C", "Amount"],
+  ]) {
+    const cell = report.getCell(`${column}8`);
+    cell.value = heading;
+    cell.font = { bold: true };
+    cell.fill = HEADER_FILL;
+    cell.border = BORDERED;
+  }
+
+  // A data region formatted and waiting, but only two rows deep, so writing four
+  // rows lands two on it and two past the end of it.
+  for (const row of [9, 10]) {
+    for (const column of ["A", "B", "C"]) {
+      report.getCell(`${column}${row}`).border = BORDERED;
+    }
+    report.getCell(`C${row}`).numFmt = "#,##0.00";
+  }
+
+  report.getCell("A13").value = "Total";
+  report.getCell("A13").font = { bold: true };
+  // The cached result is deliberately wrong for the data about to be written, so
+  // a file that did not recalculate shows 0 here.
+  report.getCell("C13").value = { formula: "SUM(C9:C12)", result: 0 };
+  report.getCell("C13").font = { bold: true };
+  report.getCell("C13").numFmt = "#,##0.00";
+
+  report.addConditionalFormatting({
+    ref: "B9:B12",
+    rules: [
+      {
+        type: "cellIs",
+        operator: "greaterThan",
+        formulae: [10],
+        style: { font: { color: { argb: "FFCC0000" }, bold: true } },
+      },
+    ],
+  });
+
+  const notes = workbook.addWorksheet("Notes");
+  notes.getCell("A1").value = "This sheet is never opened by the fill, so every byte of it should survive.";
+
+  return workbook.xlsx.writeBuffer();
+}
+
+async function fill(source) {
+  const editor = (await Workbook.open(source)).edit();
+  const report = editor.worksheet("Report");
+
+  report.set("C3", "Northwind Traders");
+  report.set("C4", new Date("2026-03-01T00:00:00.000Z"));
+  report.set("C5", new Date("2026-03-15T00:00:00.000Z"));
+
+  // Four rows into a region two rows deep, so rows 11 and 12 are new and take
+  // their formatting from row 9.
+  report.writeRows(
+    9,
+    [
+      ["Discovery workshop", 4, 400],
+      ["Implementation", 12, 600],
+      ["Review", 2, 240],
+      ["Handover", 1, 160],
+    ],
+    { inheritFrom: 9 },
+  );
+
+  const checks = editor.addWorksheet("Checks");
+  checks.appendRows(EXPECTATIONS);
+
+  return editor.save();
+}
+
+async function collect(stream) {
+  const chunks = [];
+  const reader = stream.getReader();
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    chunks.push(value);
+  }
+
+  return Buffer.concat(chunks);
+}
+
+mkdirSync(OUTPUT_DIR, { recursive: true });
+
+const provided = existsSync(TEMPLATE);
+if (!provided) {
+  writeFileSync(TEMPLATE, Buffer.from(await buildTemplate()));
+}
+
+const source = readFileSync(TEMPLATE);
+writeFileSync(FILLED, await collect(await fill(source)));
+
+console.log(`template: ${TEMPLATE}${provided ? " (yours)" : " (generated)"}`);
+console.log(`filled:   ${FILLED}`);
+console.log();
+console.log("Open the filled file in Excel and work down its Checks sheet.");
+if (!provided) {
+  console.log();
+  console.log("Charts and pivot tables are not covered: exceljs cannot write them.");
+  console.log(`For those, put a real template at ${TEMPLATE} and run this again.`);
+}

@@ -468,7 +468,8 @@ In `.ods` files, some things read but not fully:
 ## Development
 
 ```sh
-npm run verify     # lint, typecheck, and tests
-npm run build      # build the package into dist
-npm run benchmark  # compare against other libraries, see benchmark/
+npm run verify        # lint, typecheck, and tests
+npm run build         # build the package into dist
+npm run benchmark     # compare against other libraries, see benchmark/
+npm run manual-check  # build a filled template to open in Excel, see MANUAL-CHECKS.md
 ```
