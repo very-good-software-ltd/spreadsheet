@@ -1,5 +1,6 @@
 import { arrayBufferBacked } from "../io/byte-range";
 import { crc32 } from "./crc32";
+import { DOS_EPOCH_DATE, DOS_EPOCH_TIME } from "./dos-epoch";
 import type { StoredZipEntry } from "./zip-archive";
 import type { ZipWriter } from "./zip-writer";
 
@@ -28,12 +29,6 @@ const UTF8_PATH_FLAG = 0x0800;
 // ourselves has to be described afterwards. The central directory, written last,
 // always carries the real values, which is where a reader looks.
 const DATA_DESCRIPTOR_FLAG = 0x0008;
-
-// MS-DOS packed 1980-01-01, the earliest the format can express, used for every
-// entry we create. A real clock would make the same input produce a different
-// file on every run, and nothing reads an entry timestamp out of a spreadsheet.
-const DOS_EPOCH_DATE = (1 << 5) | 1;
-const DOS_EPOCH_TIME = 0;
 
 interface DirectoryRecord {
   readonly path: Uint8Array;

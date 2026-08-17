@@ -3,6 +3,8 @@ import type { BinarySource } from "./io/source";
 import { readSpreadsheet } from "./read-spreadsheet";
 import type { Row } from "./row";
 import { Worksheet } from "./worksheet";
+import { blankXlsxArchive } from "./xlsx/blank-workbook";
+import { readXlsx } from "./xlsx/read-xlsx";
 
 // A whole-bytes input, held in memory, or a seekable Blob, a File in the browser
 // or an fs.openAsBlob handle in Node, read in ranges so the file is never fully
@@ -24,6 +26,15 @@ export interface WorkbookData {
 export class Workbook {
   static async open(source: WorkbookSource): Promise<Workbook> {
     return new Workbook(await readSpreadsheet(await toByteRange(source)));
+  }
+
+  /**
+   * A workbook with one empty worksheet, as the starting point for building a
+   * file. It behaves exactly like an opened one, so creating a file from scratch
+   * and filling a template are the same code from here on.
+   */
+  static async create(): Promise<Workbook> {
+    return new Workbook(await readXlsx(blankXlsxArchive()));
   }
 
   constructor(private readonly data: WorkbookData) {}
