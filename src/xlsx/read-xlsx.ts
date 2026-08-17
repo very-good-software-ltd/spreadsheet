@@ -1,7 +1,9 @@
+import type { Editor } from "../editor";
 import type { Row } from "../row";
 import type { WorkbookData, WorksheetInfo } from "../workbook";
 import { createXmlReader } from "../xml/create-xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
+import { XlsxEditor } from "./edit-xlsx";
 import type { CellContext } from "./interpret-cell";
 import { readSharedStrings } from "./read-shared-strings";
 import { readSheetRows } from "./read-sheet";
@@ -18,6 +20,9 @@ export async function readXlsx(archive: ZipArchive): Promise<WorkbookData> {
 
   return {
     worksheets,
+    edit(): Editor {
+      return new XlsxEditor(archive, refs, styles, date1904);
+    },
     openRows(index: number): AsyncIterable<Row> {
       const ref = refs[index];
 

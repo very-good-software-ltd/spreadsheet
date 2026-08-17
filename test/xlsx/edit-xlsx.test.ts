@@ -1,0 +1,270 @@
+import { describe, expect, it } from "vitest";
+import { formula } from "../../src/cell-input";
+import { Workbook } from "../../src/workbook";
+import { odsWith } from "../support/ods-fixture";
+import { xlsx } from "../support/xlsx-fixture";
+
+async function bytesOf(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    chunks.push(value);
+    total += value.length;
+  }
+
+  const all = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    all.set(chunk, offset);
+    offset += chunk.length;
+  }
+
+  return all;
+}
+
+async function cellsOf(bytes: Uint8Array, sheet: string | number = 0): Promise<unknown[][]> {
+  const workbook = await Workbook.open(bytes);
+  const rows: unknown[][] = [];
+
+  for await (const row of workbook.worksheet(sheet).rows()) {
+    const values: unknown[] = [];
+    for (const cell of row.cells) {
+      values[cell.columnIndex] = cell.value;
+    }
+    rows[row.number - 1] = values;
+  }
+
+  return [...rows];
+}
+
+describe("editing an xlsx", () => {
+  it("writes a value into a cell and reads it back", async () => {
+    const source = xlsx([{ name: "Data", rows: [[1, 2]] }]);
+    const workbook = await Workbook.open(source);
+    const editor = workbook.edit();
+
+    editor.worksheet("Data").set("B1", 42);
+
+    expect(await cellsOf(await bytesOf(editor.save()))).toEqual([[1, 42]]);
+  });
+
+  it("leaves the cells it was not asked about alone", async () => {
+    const source = xlsx([{ name: "Data", rows: [["keep", "change", "keep too"]] }]);
+    const workbook = await Workbook.open(source);
+    const editor = workbook.edit();
+
+    editor.worksheet(0).set("B1", "changed");
+
+    expect(await cellsOf(await bytesOf(editor.save()))).toEqual([["keep", "changed", "keep too"]]);
+  });
+
+  it("writes each kind of value", async () => {
+    const workbook = await Workbook.create();
+    const editor = workbook.edit();
+
+    editor
+      .worksheet(0)
+      .set("A1", 42.5)
+      .set("B1", "text")
+      .set("C1", true)
+      .set("D1", new Date("2020-01-01T00:00:00.000Z"))
+      .set("E1", formula("SUM(A1:A1)"));
+
+    const cells = await cellsOf(await bytesOf(editor.save()));
+
+    expect(cells[0]?.[0]).toBe(42.5);
+    expect(cells[0]?.[1]).toBe("text");
+    expect(cells[0]?.[2]).toBe(true);
+    expect(cells[0]?.[3]).toEqual(new Date("2020-01-01T00:00:00.000Z"));
+    expect(cells[0]?.[4]).toBe("SUM(A1:A1)");
+  });
+
+  it("blanks a cell with null", async () => {
+    const source = xlsx([{ name: "Data", rows: [["gone", "here"]] }]);
+    const workbook = await Workbook.open(source);
+    const editor = workbook.edit();
+
+    editor.worksheet(0).set("A1", null);
+
+    expect(await cellsOf(await bytesOf(editor.save()))).toEqual([[undefined, "here"]]);
+  });
+
+  it("appends rows from an array", async () => {
+    const source = xlsx([{ name: "Data", rows: [["header"]] }]);
+    const workbook = await Workbook.open(source);
+    const editor = workbook.edit();
+
+    editor.worksheet(0).appendRows([
+      [1, 2],
+      [3, 4],
+    ]);
+
+    expect(await cellsOf(await bytesOf(editor.save()))).toEqual([["header"], [1, 2], [3, 4]]);
+  });
+
+  it("appends rows from a generator, which is not read until the file is saved", async () => {
+    const workbook = await Workbook.create();
+    const editor = workbook.edit();
+    let pulled = 0;
+
+    editor.worksheet(0).appendRows(
+      (async function* () {
+        for (let i = 1; i <= 3; i += 1) {
+          pulled += 1;
+          yield [i];
+        }
+      })(),
+    );
+
+    expect(pulled).toBe(0);
+    expect(await cellsOf(await bytesOf(editor.save()))).toEqual([[1], [2], [3]]);
+    expect(pulled).toBe(3);
+  });
+
+  it("writes rows at a position, over what is already there", async () => {
+    const source = xlsx([{ name: "Data", rows: [["a"], ["b"], ["c"], ["d"]] }]);
+    const workbook = await Workbook.open(source);
+    const editor = workbook.edit();
+
+    editor.worksheet(0).writeRows(2, [["B"], ["C"]]);
+
+    expect(await cellsOf(await bytesOf(editor.save()))).toEqual([["a"], ["B"], ["C"], ["d"]]);
+  });
+
+  it("writes rows past the end of the sheet", async () => {
+    const source = xlsx([{ name: "Data", rows: [["a"]] }]);
+    const workbook = await Workbook.open(source);
+    const editor = workbook.edit();
+
+    editor.worksheet(0).writeRows(3, [["c"]]);
+
+    expect(await cellsOf(await bytesOf(editor.save()))).toEqual([["a"], undefined, ["c"]]);
+  });
+
+  it("leaves a column alone where a row has a gap, and blanks it where it has null", async () => {
+    const source = xlsx([{ name: "Data", rows: [["a", "b", "c"]] }]);
+    const workbook = await Workbook.open(source);
+    const editor = workbook.edit();
+
+    editor.worksheet(0).writeRows(1, [[undefined, null, "C"]]);
+
+    expect(await cellsOf(await bytesOf(editor.save()))).toEqual([["a", undefined, "C"]]);
+  });
+
+  it("lets the last call win where two cover the same cell", async () => {
+    const workbook = await Workbook.create();
+    const editor = workbook.edit();
+
+    editor
+      .worksheet(0)
+      .set("A1", "first")
+      .writeRows(1, [["second"]]);
+
+    expect(await cellsOf(await bytesOf(editor.save()))).toEqual([["second"]]);
+  });
+
+  it("lets a later set win over an earlier block", async () => {
+    const workbook = await Workbook.create();
+    const editor = workbook.edit();
+
+    editor
+      .worksheet(0)
+      .writeRows(1, [["from block"]])
+      .set("A1", "from set");
+
+    expect(await cellsOf(await bytesOf(editor.save()))).toEqual([["from set"]]);
+  });
+
+  it("edits more than one sheet in the same save", async () => {
+    const source = xlsx([
+      { name: "One", rows: [["a"]] },
+      { name: "Two", rows: [["b"]] },
+    ]);
+    const workbook = await Workbook.open(source);
+    const editor = workbook.edit();
+
+    editor.worksheet("One").set("A1", "A");
+    editor.worksheet("Two").set("A1", "B");
+    const bytes = await bytesOf(editor.save());
+
+    expect(await cellsOf(bytes, "One")).toEqual([["A"]]);
+    expect(await cellsOf(bytes, "Two")).toEqual([["B"]]);
+  });
+
+  it("keeps every part it did not touch", async () => {
+    const source = xlsx([{ name: "Data", rows: [["a"]] }]);
+    const workbook = await Workbook.open(source);
+    const editor = workbook.edit();
+
+    editor.worksheet(0).set("A1", "b");
+    const written = await Workbook.open(await bytesOf(editor.save()));
+
+    expect(written.worksheetNames).toEqual(["Data"]);
+  });
+
+  describe("what it refuses", () => {
+    it("rejects a reference that is not a cell, at the call", async () => {
+      const sheet = (await Workbook.create()).edit().worksheet(0);
+
+      expect(() => sheet.set("nonsense", 1)).toThrow(/not a cell reference/i);
+      expect(() => sheet.set("A0", 1)).toThrow(/not a cell reference/i);
+      expect(() => sheet.set("A1:B2", 1)).toThrow(/not a cell reference/i);
+    });
+
+    it("accepts a lowercase reference", async () => {
+      const workbook = await Workbook.create();
+      const editor = workbook.edit();
+
+      editor.worksheet(0).set("b2", "here");
+
+      expect(await cellsOf(await bytesOf(editor.save()))).toEqual([undefined, [undefined, "here"]]);
+    });
+
+    it("rejects an unknown worksheet", async () => {
+      const editor = (await Workbook.create()).edit();
+
+      expect(() => editor.worksheet("Missing")).toThrow(/not found/i);
+      expect(() => editor.worksheet(4)).toThrow(/not found/i);
+    });
+
+    it("rejects inheriting formatting from a row it will already have passed", async () => {
+      const sheet = (await Workbook.create()).edit().worksheet(0);
+
+      expect(() => sheet.writeRows(5, [[1]], { inheritFrom: 9 })).toThrow(/read once from the top/i);
+    });
+
+    it("refuses to save twice, since a row source is read once", async () => {
+      const editor = (await Workbook.create()).edit();
+
+      editor.worksheet(0).set("A1", 1);
+      await bytesOf(editor.save());
+
+      expect(() => editor.save()).toThrow(/already been saved/i);
+    });
+
+    it("surfaces a failing row source as a stream error", async () => {
+      const editor = (await Workbook.create()).edit();
+
+      editor.worksheet(0).appendRows(
+        (async function* () {
+          yield [1];
+          throw new Error("the source gave up");
+        })(),
+      );
+
+      await expect(bytesOf(editor.save())).rejects.toThrow("the source gave up");
+    });
+
+    it("says why an ods workbook cannot be written", async () => {
+      const workbook = await Workbook.open(odsWith('<table:table table:name="Data"></table:table>'));
+
+      expect(() => workbook.edit()).toThrow(/\.ods files is not supported/i);
+    });
+  });
+});

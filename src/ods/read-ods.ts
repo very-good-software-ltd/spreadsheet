@@ -1,5 +1,6 @@
 import type { Cell, CellValue } from "../cell";
 import { cellReference } from "../cell-reference";
+import type { Editor } from "../editor";
 import { readPart } from "../read-part";
 import { Row } from "../row";
 import type { WorkbookData, WorksheetInfo } from "../workbook";
@@ -39,6 +40,12 @@ export async function readOds(archive: ZipArchive): Promise<WorkbookData> {
 
   return {
     worksheets,
+    // Present only to say why, rather than leaving the caller with the generic
+    // message. Writing ODF shares the zip and XML layers and nothing else, since
+    // the fidelity work is per format.
+    edit(): Editor {
+      throw new Error("Writing .ods files is not supported. Only .xlsx can be written");
+    },
     openRows(index: number): AsyncIterable<Row> {
       return readOdsSheet(archive, xml, index);
     },

@@ -1,3 +1,4 @@
+import type { Editor } from "./editor";
 import { toByteRange } from "./io/byte-range";
 import type { BinarySource } from "./io/source";
 import { readSpreadsheet } from "./read-spreadsheet";
@@ -21,6 +22,9 @@ export interface WorksheetInfo {
 export interface WorkbookData {
   readonly worksheets: readonly WorksheetInfo[];
   openRows(index: number): AsyncIterable<Row>;
+
+  /** An editor over the same file. Absent for a format that only reads. */
+  readonly edit?: () => Editor;
 }
 
 export class Workbook {
@@ -58,6 +62,19 @@ export class Workbook {
     }
 
     return new Worksheet(() => this.data.openRows(index));
+  }
+
+  /**
+   * An editor that writes a new file from this one. Reading and writing are
+   * separate: the editor never reflects edits back into this workbook's rows.
+   *
+   * Throws for a format we do not write.
+   */
+  edit(): Editor {
+    if (this.data.edit === undefined) {
+      throw new Error("Writing this format is not supported");
+    }
+    return this.data.edit();
   }
 
   firstWorksheet(): Worksheet {
