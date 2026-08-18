@@ -110,9 +110,11 @@ function moved(match: RegExpExecArray, shift: RowShift, onSheet: string): string
   return range === undefined ? BROKEN : `${prefix}${withRow(first, range[0])}:${withRow(last, range[1])}`;
 }
 
-// A row that appeared before this one pushes it down. A row that went away pulls it
-// up, unless this one went away with it and has nowhere left to be.
-function movedRow(row: number, shift: RowShift): number | undefined {
+/**
+ * Where `row` ends up, or `undefined` when it went away with the rows that were
+ * removed and has nowhere left to be.
+ */
+export function movedRow(row: number, shift: RowShift): number | undefined {
   if (shift.by > 0) {
     return row >= shift.at ? row + shift.by : row;
   }
