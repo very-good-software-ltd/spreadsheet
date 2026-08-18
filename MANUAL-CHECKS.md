@@ -120,6 +120,22 @@ end of a written sheet behaves oddly, or Excel's used-range shortcuts land in th
 wrong place, that is where to look.
 
 
+## Whether a name's case matters
+
+We look a defined name up without regard to case, so a caller asking for `data`
+finds a name the template spells `Data`. That is what we believe Excel does, and
+no test here can prove it, because a file cannot show you a rule about names it
+does not contain.
+
+To check it, in Excel: Formulas, Name Manager, New, and define `Data` over any
+range. Then New again and try to define `data` over a different range.
+
+We expect Excel to refuse the second one, saying the name already exists. If it
+accepts both, then a workbook can hold two names differing only in case, our
+lookup would pick whichever comes first in the file, and the rule needs changing
+to match exactly before falling back.
+
+
 ## Known and accepted
 
 Not failures, so do not chase them:
