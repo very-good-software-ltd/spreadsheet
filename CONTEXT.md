@@ -132,10 +132,9 @@ Creating a file from scratch is the same path over an empty base workbook, so th
 Scope is `.xlsx` only. `.ods` writing is a second full implementation that shares none of the fidelity work.
 
 Rows can be written at a given row number, overwriting what is there, or appended after the last row.
-Inserting rows and shifting content down is out.
-Shifting content means rewriting every formula, merged range, conditional format and table range that pointed below the insertion.
-`exceljs` offers `insertRow` and `spliceRows` and does not do this: it shifts values and styles and adjusts defined names, but never touches formulas, so a total that summed rows 6 to 20 still sums 6 to 20 afterwards.
-Silently wrong numbers in a report is a worse failure than a missing feature, so we do not offer the feature.
+Neither moves anything, and neither ever will. `writeRows` and `appendRows` are the streaming path, where the caller knows the shape of the sheet and nothing is below the rows being written.
+
+Changed: this used to refuse row insertion outright, for the reasons decision 15 now records and answers. Moving content lives there, on a named region, and not on these two.
 
 ### 12. The write API is one surface with the reader
 
@@ -234,11 +233,10 @@ Matching a header row by its text does not happen.
 It is a guess wearing an anchor's clothes, and a guess that silently picks the wrong row is the failure class we turned down `insertRow` over.
 
 A named region is a contract about an area, not a starting coordinate.
-More rows than the region holds is refused, rather than spilling past the bottom edge into whatever the author put there, and so is a row wider than it is.
-Fewer rows than the region holds clears the remainder, keeping the formatting, because rows left over from the last run are last month's numbers in this month's report and nothing about them looks wrong.
-A row that stops short has the rest of its columns cleared for the same reason, while a gap the caller writes as `undefined` still means leave that cell alone, since the length of a row is not a decision about the columns past its end.
+A row wider than the region is refused rather than spilling into the column beside it.
+A row that stops short has the rest of its columns cleared, because what is sitting there is the last run's data formatted exactly like this run's, while a gap the caller writes as `undefined` still means leave that cell alone, since the length of a row is not a decision about the columns past its end.
 
-Corrected: this first said the overflow throws before anything is written, which a lazy row source cannot deliver. Nothing is read until save, so the count is only known as the rows go past. The name itself is resolved at the call, which is where a wrong or unusable name surfaces, and decision 12 already accepts that the caller's own source is the one thing left that can fail late.
+Changed: the region's height used to be a contract too, so more rows than it held was refused and fewer cleared the remainder in place. Decision 15 replaces that. The region is now as tall as the data and the sheet moves around it. The width is still a contract, because nothing moves sideways.
 This is what closes the totals-block gap in the open questions below.
 We could not detect a totals block because we did not know where the data region ended.
 A named region is the author telling us.
@@ -253,6 +251,41 @@ A whole column name like `Sheet1!$B:$B` throws too, since clearing the remainder
 Print areas are refused along with the other built-ins, which we can revisit if anyone asks.
 A name is either global or scoped to one sheet, and a sheet-scoped name shadows a global one, so the sheet's editor resolves its own names first and the workbook's editor sees only global ones.
 The shadowing is visible in the API rather than a rule to remember.
+
+
+### 15. A named region holds exactly the data it is given, and the sheet moves around it
+
+Changed: decision 11 refused row insertion outright, and decision 14 made a named region a fixed box. Both are replaced here. What follows is why.
+
+A template is a document with a hole in it.
+Everything above the hole stays, everything below it stays below, and the hole is as big as the data.
+That is what every other templating tool does and it is the model a template author already has, so a library that cannot do it has to teach a workaround instead: put the total above the data, do not park anything under the region, use a table if you want it to grow.
+Each of those is a thing we would rather not have to say.
+
+So writing into a named region makes the region exactly as tall as the rows it is given.
+More rows than it holds inserts rows and pushes everything below down.
+Fewer deletes rows and pulls everything below up.
+This is the same operation a person performs in Excel with Insert and Delete, so the semantics are not ours to invent. They are observable, and a disagreement with Excel is a bug rather than a design question.
+
+Where the rows go in is not arbitrary. Excel stretches a range only when rows appear strictly inside it, so making room happens at the region's last row rather than after it. A total written `=SUM(C9:C11)` over a region of rows 9 to 11 then becomes `=SUM(C9:C13)` when two rows arrive, which is what the author meant. Inserting after row 11 would leave it summing three rows of five. Deleting works from the far end for the same reason, so the first rows and their formatting are the ones kept.
+
+Decision 11's objection stands as a description of the work rather than as a reason not to do it. Shifting content means rewriting everything that pointed below the insertion, and `exceljs` offers insertion without doing that, which is why a total that summed rows 6 to 20 still sums 6 to 20 afterwards. Silently wrong numbers are still worse than a missing feature. The conclusion changes because there is a third option we did not consider: do the work where we can and refuse the file where we cannot.
+
+So a save either produces a correct file or throws naming what stopped it. Never a file that is quietly wrong.
+
+In scope to move: rows and cells, merged ranges, conditional formatting and data validation ranges, hyperlinks, autofilter, frozen panes, row breaks, table extents, defined names, and formula references on the sheet and on every other sheet pointing at it.
+
+Refused, naming the thing: a chart or image anchored below the region, since a drawing anchors to a row number in a part we otherwise never open. A pivot table whose source covers the region. A comment below it, which carries both a reference and a separate drawing positioning it. A formula we cannot rewrite with confidence.
+
+Drawings are the uncomfortable one, because a chart is exactly what copy-through protects and exactly what a corporate template has. They are refused in the first version and brought in after, deliberately, so that something works before the hardest part is attempted.
+
+A region shrinks to one row and no further. A range whose every endpoint is deleted becomes `#REF!` in Excel, so one surviving row is what keeps a total written over the region alive, and it costs one blank formatted row on a run with no data at all. Collapsing it entirely is a later option and changes nothing else.
+
+Excel is more forgiving here than we assumed. A range with one endpoint inside the deleted rows shrinks to what survives, rather than breaking, so `=SUM(C9:C13)` minus row 13 becomes `=SUM(C9:C12)`. Only a reference with nothing left to point at dies, which is a single cell in a deleted row or a range wholly inside them. Confirmed by hand in Excel on 2026-08-18.
+
+Writing stays a single pass except where it cannot be. Rows are counted as they go past, so anything below the region is written knowing the count. Only something written earlier that points later forces a wait, which is a summary block above the region on the same sheet, and other sheets, handled by writing the ones holding regions first. A sheet with that shape is found by scanning its formulas up to the region, which is cheap because it stops there, and only that sheet's rows are held.
+
+This supersedes the table growth rule from decision 14. A table with a totals row was refused because that row would have to move. Now it moves, so a table grows whatever is under it, and the advice to put a total above a table goes with it.
 
 
 ## Open questions
