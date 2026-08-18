@@ -231,8 +231,11 @@ Matching a header row by its text does not happen.
 It is a guess wearing an anchor's clothes, and a guess that silently picks the wrong row is the failure class we turned down `insertRow` over.
 
 A named region is a contract about an area, not a starting coordinate.
-More rows than the region holds throws before anything is written, rather than spilling past the bottom edge into whatever the author put there.
+More rows than the region holds is refused, rather than spilling past the bottom edge into whatever the author put there, and so is a row wider than it is.
 Fewer rows than the region holds clears the remainder, keeping the formatting, because rows left over from the last run are last month's numbers in this month's report and nothing about them looks wrong.
+A row that stops short has the rest of its columns cleared for the same reason, while a gap the caller writes as `undefined` still means leave that cell alone, since the length of a row is not a decision about the columns past its end.
+
+Corrected: this first said the overflow throws before anything is written, which a lazy row source cannot deliver. Nothing is read until save, so the count is only known as the rows go past. The name itself is resolved at the call, which is where a wrong or unusable name surfaces, and decision 12 already accepts that the caller's own source is the one thing left that can fail late.
 This is what closes the totals-block gap in the open questions below.
 We could not detect a totals block because we did not know where the data region ended.
 A named region is the author telling us.

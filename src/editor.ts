@@ -39,11 +39,37 @@ export interface WorksheetEditor {
 
   /** Write `rows` after the last row the sheet already has. */
   appendRows(rows: RowSource): this;
+
+  /**
+   * Write `rows` into the region this worksheet's author named `name`, placing
+   * them at its first row and first column.
+   *
+   * The region is a contract about an area rather than a place to start. Every
+   * cell it covers that `rows` does not fill is blanked, keeping its formatting,
+   * so nothing an earlier run left behind survives as if it were current. A gap
+   * the caller writes as `undefined` still leaves that cell as it was.
+   *
+   * Throws straight away if the worksheet and the workbook have no such name, or
+   * if the name points at something that cannot be written, saying which. More
+   * rows than the region holds, or a row wider than it is, can only be found as
+   * the rows are read, so that surfaces from `save`.
+   */
+  writeRegion(name: string, rows: RowSource): this;
 }
 
 export interface Editor {
   /** The editor for one worksheet, by name or by zero-based position. */
   worksheet(nameOrIndex: string | number): WorksheetEditor;
+
+  /**
+   * Write `rows` into the region the workbook's author named `name`, on whichever
+   * worksheet that name points at.
+   *
+   * Only workbook-wide names are visible here. A name scoped to one worksheet is
+   * reached through that worksheet's own editor. Everything else matches
+   * `WorksheetEditor.writeRegion`.
+   */
+  writeRegion(name: string, rows: RowSource): this;
 
   /**
    * Add an empty worksheet after the ones already there, and return its editor.

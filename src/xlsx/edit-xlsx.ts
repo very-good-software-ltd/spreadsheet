@@ -1,6 +1,7 @@
 import type { CellInput } from "../cell-input";
 import { columnIndexOf, rowNumberOf } from "../cell-reference";
 import type { Editor, RowSource, WorksheetEditor, WriteRowsOptions } from "../editor";
+import { regionRows } from "../region-rows";
 import { createXmlReader } from "../xml/create-xml-reader";
 import type { XmlEvent, XmlReader } from "../xml/xml-reader";
 import { createZipWriter } from "../zip/create-zip-writer";
@@ -8,7 +9,8 @@ import type { ZipArchive } from "../zip/zip-archive";
 import { MAIN_NAMESPACE } from "./blank-workbook";
 import { type CellEdit, mergeRowEdits, type RowBlock } from "./merge-row-edits";
 import type { Styles } from "./read-styles";
-import type { WorkbookInfo } from "./read-workbook";
+import type { DefinedNameRef, WorkbookInfo } from "./read-workbook";
+import { resolveRegion } from "./resolve-region";
 import {
   type AddedWorksheet,
   asPart,
@@ -88,6 +90,21 @@ export class XlsxEditor implements Editor {
     }
 
     return this.editorFor(index);
+  }
+
+  writeRegion(name: string, rows: RowSource): this {
+    const region = resolveRegion(this.workbook.definedNames, name);
+    const index = this.targets.findIndex((sheet) => sheet.name === region.sheet);
+
+    if (index < 0) {
+      throw new Error(
+        `The name "${region.name}" points at worksheet "${region.sheet}", which this workbook has not got`,
+      );
+    }
+
+    this.editorFor(index).writeRows(region.firstRow, regionRows(region, rows));
+
+    return this;
   }
 
   addWorksheet(name: string): WorksheetEditor {
@@ -210,7 +227,7 @@ export class XlsxEditor implements Editor {
     const edits = this.edits.get(index) ?? { cells: [], blocks: [], appended: [] };
     this.edits.set(index, edits);
 
-    return new XlsxWorksheetEditor(edits, () => {
+    return new XlsxWorksheetEditor(edits, this.workbook.definedNames, this.targets[index]?.name ?? "", () => {
       this.calls += 1;
       return this.calls;
     });
@@ -253,6 +270,8 @@ export class XlsxEditor implements Editor {
 class XlsxWorksheetEditor implements WorksheetEditor {
   constructor(
     private readonly edits: SheetEdits,
+    private readonly definedNames: readonly DefinedNameRef[],
+    private readonly sheetName: string,
     private readonly nextOrder: () => number,
   ) {}
 
@@ -297,6 +316,12 @@ class XlsxWorksheetEditor implements WorksheetEditor {
     this.edits.appended.push(rows);
 
     return this;
+  }
+
+  writeRegion(name: string, rows: RowSource): this {
+    const region = resolveRegion(this.definedNames, name, this.sheetName);
+
+    return this.writeRows(region.firstRow, regionRows(region, rows));
   }
 }
 
