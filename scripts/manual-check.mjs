@@ -26,6 +26,10 @@ const BORDERED = { top: THIN_BORDER, left: THIN_BORDER, bottom: THIN_BORDER, rig
 
 // What the filled file should look like once Excel has opened it. Written into
 // the output as its own sheet, so the file carries its own checklist.
+//
+// Do not write an expectation that is only a number. These are string cells, and
+// Excel puts a "number stored as text" warning on any text cell whose content is a
+// valid number, which reads as a fault in the file rather than in the checklist.
 const EXPECTATIONS = [
   ["Where", "What you should see", "Why it matters"],
   ["The file itself", "Opens with no repair prompt", "An entry described after its data is accepted"],
@@ -81,7 +85,7 @@ const EXPECTATIONS = [
   ],
   [
     "Ledger!D1",
-    "150",
+    "Reads 150, not 60",
     "SUM(Entries[Amount]) followed the table as it grew, which a formula written over a range could not",
   ],
   [
