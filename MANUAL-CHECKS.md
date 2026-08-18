@@ -39,9 +39,15 @@ Name Manager still lists `Movements` over its range, so the names in
 `xl/workbook.xml` survive the rewrite of that part. Every expectation on the
 Checks sheet now holds.
 
-The 2026-08-18 checks below were run before rows could move. Everything they
-settled still holds, but the Summary sheet now checks something different and is
-worth running again.
+Checked on 2026-08-18, after rows could move. `Summary!B5` reads 120 with
+`SUM(B3:B3)` in the formula bar, where the template has `SUM(B3:B5)` at `B7`.
+February and March are nowhere on the sheet. `Ledger!D1` still reads 150.
+
+That settles the largest thing the writer does. The rows went, everything under
+them came up, and the formula was rewritten to match rather than left pointing at
+rows that are no longer there. Both figures being right also means Excel opened the
+file and recalculated it, since a cached result would have been wrong for the data
+we wrote.
 
 Checked on 2026-08-18, after tables landed. `Ledger!D1` reads 150, so
 `SUM(Entries[Amount])` covered all five rows written into a table that had room
