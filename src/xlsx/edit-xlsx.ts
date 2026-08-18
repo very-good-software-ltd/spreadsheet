@@ -15,6 +15,7 @@ import type { TableOnSheet } from "./read-tables";
 import type { WorkbookInfo } from "./read-workbook";
 import { shiftFor } from "./region-shift";
 import { type NamedThings, resolveRegion } from "./resolve-region";
+import { shiftDrawingAnchors } from "./shift-drawing";
 import type { RowShift } from "./shift-formula";
 import { shiftForeignFormulas, shiftSheetRows } from "./shift-sheet";
 import {
@@ -105,6 +106,7 @@ export class XlsxEditor implements Editor {
     private readonly workbook: WorkbookInfo,
     private readonly styles: Styles,
     private readonly tables: readonly TableOnSheet[] = [],
+    private readonly drawings: ReadonlyMap<string, readonly string[]> = new Map(),
   ) {
     this.targets = workbook.worksheets.map((sheet) => ({ name: sheet.name, path: sheet.path, added: false }));
     this.takenRelationshipIds = new Set(workbook.relationshipIds);
@@ -191,6 +193,7 @@ export class XlsxEditor implements Editor {
 
     const rewritten = this.packageParts(part);
     const sheets = this.sheetParts(dateStyles);
+    const movingDrawings = this.movingDrawings();
 
     for (const entry of this.archive.entries()) {
       if (
@@ -198,7 +201,8 @@ export class XlsxEditor implements Editor {
         entry.path === WORKBOOK_PART ||
         sheets.has(entry.path) ||
         entry.path === CALCULATION_CHAIN_PART ||
-        this.growing.has(entry.path)
+        this.growing.has(entry.path) ||
+        movingDrawings.has(entry.path)
       ) {
         continue;
       }
@@ -213,6 +217,15 @@ export class XlsxEditor implements Editor {
 
     for (const [path, content] of sheets) {
       writer.add(path, encoded(content));
+    }
+
+    // A moved sheet's drawings are declared after it, because how far its rows moved
+    // is only known once they have gone past.
+    for (const [path, sheet] of movingDrawings) {
+      writer.add(
+        path,
+        encoded(() => this.drawingPart(path, sheet)),
+      );
     }
 
     // The workbook part is declared after the sheets because its defined names have
@@ -340,6 +353,33 @@ export class XlsxEditor implements Editor {
       },
       { dateStyles, date1904: this.workbook.date1904 },
     );
+  }
+
+  // Which drawing parts belong to a worksheet a region is being written into. That a
+  // region was written is known before any row is read, which is when the choice to
+  // copy an entry or rebuild it has to be made.
+  private movingDrawings(): Map<string, string> {
+    const moving = new Map<string, string>();
+
+    for (const [index, edits] of this.edits) {
+      const name = this.targets[index]?.name;
+      if (name === undefined || edits.regions.length === 0) {
+        continue;
+      }
+
+      for (const path of this.drawings.get(name) ?? []) {
+        moving.set(path, name);
+      }
+    }
+
+    return moving;
+  }
+
+  private async *drawingPart(path: string, sheet: string): AsyncIterable<string> {
+    const shift = (await this.regions()).find((region) => region.sheet === sheet)?.shift;
+    const events = this.xml.read(this.archive.openStream(path));
+
+    yield* asPart(flatten(shift === undefined ? events : shiftDrawingAnchors(events, shift)));
   }
 
   private async refuseIfBlocked(target: Target, prepared: PreparedRegion): Promise<void> {

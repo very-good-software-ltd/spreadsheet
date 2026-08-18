@@ -39,6 +39,9 @@ Name Manager still lists `Movements` over its range, so the names in
 `xl/workbook.xml` survive the rewrite of that part. Every expectation on the
 Checks sheet now holds.
 
+Not yet checked with a drawing on the sheet. The Summary sheet now carries a
+picture below its region, and whether Excel accepts where we put it is open.
+
 Checked on 2026-08-18, after rows could move. `Summary!B5` reads 120 with
 `SUM(B3:B3)` in the formula bar, where the template has `SUM(B3:B5)` at `B7`.
 February and March are nowhere on the sheet. `Ledger!D1` still reads 150.
@@ -201,6 +204,21 @@ not do.
 Clicking inside the last row and looking for Table Design on the ribbon asks the
 same question more weakly, and is only worth doing if the total looks wrong and
 you want to see where it went wrong.
+
+
+## Why there is a picture on the Summary sheet
+
+It stands in for a chart. `exceljs` cannot write one, and a chart is anchored to
+rows exactly the way a picture is, so this covers the same mechanism with the
+tools available.
+
+It is anchored two rows below the Total, which is itself below the region. Two
+rows come out of the region, so both have to come up by two and the gap between
+them has to stay two rows. Four rows of gap means the picture did not move.
+
+This is the check most worth repeating against a real template, since a real one
+will have a chart rather than a picture, and a chart also holds its own series
+ranges, which we rewrite as formulas rather than as anchors.
 
 
 ## Whether a name's case matters

@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { Workbook } from "../../src/workbook";
 
@@ -27,6 +28,12 @@ async function templateWith(decorate: (workbook: ExcelJS.Workbook, sheet: ExcelJ
   return new Uint8Array(await source.xlsx.writeBuffer());
 }
 
+function anchorRowsIn(bytes: Uint8Array): (string | undefined)[] {
+  const drawing = strFromU8(unzipSync(bytes)["xl/drawings/drawing1.xml"] ?? new Uint8Array());
+
+  return [...drawing.matchAll(/<xdr:row>(\d+)<\/xdr:row>/g)].map((match) => match[1]);
+}
+
 async function writeThreeRowsInto(bytes: Uint8Array) {
   const editor = (await Workbook.open(bytes)).edit();
   editor.worksheet("Report").writeRegion("Data", [[1], [2], [3], [4]]);
@@ -41,24 +48,24 @@ describe("what stops a worksheet's rows moving", () => {
     await expect(writeThreeRowsInto(bytes)).resolves.toBeInstanceOf(Uint8Array);
   });
 
-  it("refuses when an image is anchored where the rows would move", async () => {
+  it("moves an image anchored where the rows move, rather than refusing", async () => {
     const bytes = await templateWith((workbook, sheet) => {
       const image = workbook.addImage({ base64: PIXEL, extension: "png" });
       sheet.addImage(image, "D6:E9");
     });
 
-    await expect(writeThreeRowsInto(bytes)).rejects.toThrow(
-      "that sheet has a drawing at or below row 5, which anchors charts and images to row numbers we do not rewrite",
-    );
+    // A drawing counts rows from zero and its lower corner is exclusive, so the
+    // template anchors D6:E9 at 5 and 9. One row appears above it, so both move.
+    expect(anchorRowsIn(await writeThreeRowsInto(bytes))).toEqual(["6", "10"]);
   });
 
-  it("allows an image anchored above the rows that move", async () => {
+  it("leaves an image anchored above the rows that move where it is", async () => {
     const bytes = await templateWith((workbook, sheet) => {
       const image = workbook.addImage({ base64: PIXEL, extension: "png" });
       sheet.addImage(image, "D1:E2");
     });
 
-    await expect(writeThreeRowsInto(bytes)).resolves.toBeInstanceOf(Uint8Array);
+    expect(anchorRowsIn(await writeThreeRowsInto(bytes))).toEqual(["0", "2"]);
   });
 
   it("refuses when a comment sits where the rows would move", async () => {

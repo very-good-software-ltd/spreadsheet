@@ -268,11 +268,15 @@ Decision 11's objection stands as a description of the work rather than as a rea
 
 So a save either produces a correct file or throws naming what stopped it. Never a file that is quietly wrong.
 
-In scope to move: rows and cells, merged ranges, conditional formatting and data validation ranges, hyperlinks, autofilter, frozen panes, row breaks, table extents, defined names, and formula references on the sheet and on every other sheet pointing at it.
+In scope to move: rows and cells, merged ranges, conditional formatting and data validation ranges, hyperlinks, autofilter, frozen panes, row breaks, table extents, defined names, formula references on the sheet and on every other sheet pointing at it, and the anchors a drawing places its shapes by.
 
-Refused, naming the thing: a chart or image anchored below the region, since a drawing anchors to a row number in a part we otherwise never open. A pivot table whose source covers the region. A comment below it, which carries both a reference and a separate drawing positioning it. A formula we cannot rewrite with confidence.
+Refused, naming the thing: a pivot table whose source covers the region. A comment below it. A formula we cannot rewrite with confidence. And a shape standing only on rows that are going away, since nothing is left to hang it from and dropping a chart in silence is worse than refusing.
 
-Drawings are the uncomfortable one, because a chart is exactly what copy-through protects and exactly what a corporate template has. They are refused in the first version and brought in after, deliberately, so that something works before the hardest part is attempted.
+A drawing counts rows from zero where a sheet counts from one, and an absolute anchor names no row at all and does not move, which matches Excel.
+
+Comments stay refused for a reason of their own. A comment carries a reference in one part and its position in a second, written in VML, a legacy format we have no reader for. Moving the reference alone would leave the box it appears in behind.
+
+Changed: drawings were refused in the first version, deliberately, so that something worked before the hardest part was attempted. They move now.
 
 A region shrinks to one row and no further. A range whose every endpoint is deleted becomes `#REF!` in Excel, so one surviving row is what keeps a total written over the region alive, and it costs one blank formatted row on a run with no data at all. Collapsing it entirely is a later option and changes nothing else.
 

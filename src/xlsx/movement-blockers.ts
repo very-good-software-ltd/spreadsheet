@@ -5,17 +5,12 @@ import { readRelationships } from "./read-relationships";
 import type { RowShift } from "./shift-formula";
 
 const RELATIONSHIPS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-const DRAWING = `${RELATIONSHIPS}/drawing`;
 const COMMENTS = `${RELATIONSHIPS}/comments`;
 const PIVOT_CACHE = `${RELATIONSHIPS}/pivotCacheDefinition`;
 
 const WORKBOOK_PART = "xl/workbook.xml";
 
-// A drawing places a shape by the row and column it starts and ends on, in its own
-// namespace, so a row number sits in the text of an element rather than in an
-// attribute. The row is zero-based here, where everything else on a sheet is not.
 const Element = {
-  DrawingRow: "xdr:row",
   Comment: "comment",
   PivotSource: "worksheetSource",
 } as const;
@@ -46,12 +41,6 @@ export async function blockersFor(
       continue;
     }
 
-    if (relationship.type === DRAWING && (await drawingReaches(archive, xml, relationship.target, shift.at))) {
-      blockers.push(
-        `a drawing at or below row ${shift.at}, which anchors charts and images to row numbers we do not rewrite`,
-      );
-    }
-
     if (relationship.type === COMMENTS && (await commentReaches(archive, xml, relationship.target, shift.at))) {
       blockers.push(`a cell comment at or below row ${shift.at}, which is positioned by a drawing of its own`);
     }
@@ -62,24 +51,6 @@ export async function blockersFor(
   }
 
   return blockers;
-}
-
-async function drawingReaches(archive: ZipArchive, xml: XmlReader, path: string, row: number): Promise<boolean> {
-  let inRow = false;
-
-  for await (const batch of readPart(archive, xml, path)) {
-    for (const event of batch) {
-      if (event.type === "open") {
-        inRow = event.name === Element.DrawingRow;
-      } else if (event.type === "text" && inRow && Number(event.text) + 1 >= row) {
-        return true;
-      } else if (event.type === "close") {
-        inRow = false;
-      }
-    }
-  }
-
-  return false;
 }
 
 async function commentReaches(archive: ZipArchive, xml: XmlReader, path: string, row: number): Promise<boolean> {

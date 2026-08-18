@@ -517,7 +517,9 @@ Saving twice throws, because your row sources have already been read and the sec
 - Deleting or renaming a sheet. Both ripple into everything that refers to them by name.
 - Growing a chart's range to cover rows you wrote.
 - Growing an Excel Table you filled by row number, since nothing in that call says the rows belong to it. Address the table by name and it grows.
-- Anything at all on a sheet whose rows are moving that we cannot move with them. Rather than leave it stale, `save` throws and names it. That means a chart or image anchored below the region, a cell comment below it, a pivot table reading from it, a formula spanning a range of sheets, a whole row reference, and a sheet carrying an extension list, which is where sparklines and the newer conditional formats live. A chart *above* the region is untouched and fine.
+- Anything on a sheet whose rows are moving that we cannot move with them. Rather than leave it stale, `save` throws and names it. That means a cell comment below the region, a pivot table reading from it, a formula spanning a range of sheets, a whole row reference, and a sheet carrying an extension list, which is where sparklines and the newer conditional formats live.
+
+Charts and images do move. A shape anchored below the region comes down or up with the rows, and one anchored across the region stretches, the same as Excel does when you insert rows by hand. The one case that stops a save is a shape standing only on rows that are going away, since there would be nothing left to hang it from.
 - Keeping a digital signature valid. Any change to a file invalidates it.
 - Files past 4 GB, or with a single part past 4 GB. Those need Zip64, which we do not write, and we throw rather than produce a file no reader will open. This mirrors the read side, which throws on a Zip64 archive. Handling files that large is its own piece of work.
 

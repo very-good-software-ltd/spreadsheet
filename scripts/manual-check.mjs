@@ -30,6 +30,10 @@ const BORDERED = { top: THIN_BORDER, left: THIN_BORDER, bottom: THIN_BORDER, rig
 // Do not write an expectation that is only a number. These are string cells, and
 // Excel puts a "number stored as text" warning on any text cell whose content is a
 // valid number, which reads as a fault in the file rather than in the checklist.
+// A one pixel PNG, scaled up where it is placed. The picture does not matter, only
+// where it ends up.
+const PIXEL_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
 const EXPECTATIONS = [
   ["Where", "What you should see", "Why it matters"],
   ["The file itself", "Opens with no repair prompt", "An entry described after its data is accepted"],
@@ -78,6 +82,11 @@ const EXPECTATIONS = [
     "The total was written over the region's rows and followed it as it shrank, instead of breaking or summing the wrong ones",
   ],
   ["Summary!E3", "Still says 'keep me'", "A row that stayed kept everything on it"],
+  [
+    "The image on Summary",
+    "Still two rows below Total, at about row 7",
+    "A picture anchored below the region came up with the rows. Four rows of gap means it did not move, and a chart is anchored the same way",
+  ],
   [
     "Formulas, Name Manager",
     "Still lists Movements over Summary!$B$3:$D$5",
@@ -211,6 +220,13 @@ async function buildTemplate() {
       ["old two", 2, 999],
     ],
   });
+
+  // Anchored two rows below the total, which is itself below the region. The fill
+  // takes two rows out of the region, so both the total and this have to come up by
+  // two and the gap between them has to stay the same. exceljs cannot write a
+  // chart, and a chart is anchored the same way, so an image stands in for one.
+  const logo = workbook.addImage({ base64: PIXEL_PNG, extension: "png" });
+  summary.addImage(logo, { tl: { col: 0, row: 8 }, ext: { width: 120, height: 60 } });
 
   const notes = workbook.addWorksheet("Notes");
   notes.getCell("A1").value = "This sheet is never opened by the fill, so every byte of it should survive.";
