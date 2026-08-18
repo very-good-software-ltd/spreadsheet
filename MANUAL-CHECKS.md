@@ -28,8 +28,17 @@ formula result is recalculated. And removing the calculation chain leaves no
 dangling content type override or relationship behind.
 
 So the parts of the design that could only be confirmed by Excel are confirmed.
+
+Checked again on 2026-08-18, after named regions landed. The `Summary` sheet
+holds: the row written by name is in the right place, the two rows of the region
+we were not given come back empty with their formatting, and the labels either
+side of it are untouched. So clearing works in Excel and stops at the region's
+edges.
+
 What is still worth a pass before a release is a real template, since the
-generated one has no charts or pivot tables in it.
+generated one has no charts or pivot tables in it. The `Movements` entry in
+Formulas, Name Manager has not been looked at yet, and it is the one item on the
+Checks sheet that is not visible from the grid.
 
 
 ## Start here
