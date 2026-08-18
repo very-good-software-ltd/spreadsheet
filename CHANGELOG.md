@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Filling a region allocates one array per row instead of three, which lowered its peak memory by about an eighth on a million rows. Nothing about the output changes.
+
+### Added
+
+- A `region` mode in the write benchmark, so the memory cost of filling a region sits next to the streaming and load-everything paths rather than being described in prose. `npm run benchmark -- --write=1000000`.
+
 ## [0.3.0] - 2026-08-18
 
 ### Added

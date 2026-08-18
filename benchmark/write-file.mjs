@@ -9,6 +9,10 @@
 // Modes:
 //   stream - hand the rows over as a source and let the writer pull them
 //   load   - build every row in memory first, the load-everything path
+//   region - fill a template's named region, which moves the rows below it. Only
+//            we have this, so it has no counterpart in the other libraries. It is
+//            here because it is the one write path that holds its rows, and the
+//            claim that writing is flat has to be honest about where it is not.
 import { createWriteStream, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -32,6 +36,19 @@ function* rows(count) {
   }
 }
 
+// A one-row region under a heading, which is the shape of a real template: the
+// author draws one row to show what a row looks like and names it.
+async function regionTemplate() {
+  const ExcelJS = await importDefault("exceljs");
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Data");
+  sheet.addRow(["Id", "Description", "Amount", "Flagged"]);
+  sheet.addRow(rowAt(0));
+  workbook.definedNames.add("Data!A2:D2", "Data");
+
+  return new Uint8Array(await workbook.xlsx.writeBuffer());
+}
+
 const runners = {
   "@very-good-software/spreadsheet": {
     async stream(count, path) {
@@ -46,6 +63,12 @@ const runners = {
       // Materialising the rows first is the thing the streaming mode avoids, so
       // the pair shows what handing over a source rather than an array buys.
       editor.worksheet(0).appendRows([...rows(count)]);
+      await editor.save().pipeTo(Writable.toWeb(createWriteStream(path)));
+    },
+    async region(count, path) {
+      const { Workbook } = await importDefault("../dist/index.js");
+      const editor = (await Workbook.open(await regionTemplate())).edit();
+      editor.worksheet(0).writeRegion("Data", rows(count));
       await editor.save().pipeTo(Writable.toWeb(createWriteStream(path)));
     },
   },

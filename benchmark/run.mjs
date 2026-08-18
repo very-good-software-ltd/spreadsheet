@@ -25,9 +25,12 @@ const RUNS = [
 
 // SheetJS builds the whole sheet before writing, and exceljs has a streaming
 // writer as well as its ordinary one, the same split as on the read side.
+// region is ours alone: filling a named region moves the rows below it, so the
+// rows have to be counted before anything is written and are held while they are.
 const WRITE_RUNS = [
   ["@very-good-software/spreadsheet", "stream"],
   ["@very-good-software/spreadsheet", "load"],
+  ["@very-good-software/spreadsheet", "region"],
   ["exceljs", "stream"],
   ["exceljs", "load"],
   ["xlsx", "load"],

@@ -20,7 +20,6 @@ export async function* regionRows(
   rows: RowSource,
 ): AsyncIterable<readonly (CellInput | undefined)[]> {
   const width = region.lastColumnIndex - region.firstColumnIndex + 1;
-  const lead = Array.from<undefined>({ length: region.firstColumnIndex });
   let written = 0;
 
   for await (const values of rows) {
@@ -28,15 +27,31 @@ export async function* regionRows(
       throw new Error(`The name "${region.name}" covers ${width} columns and was given a row of ${values.length}`);
     }
 
-    yield [...lead, ...values, ...blanks(width - values.length)];
+    yield placed(region, width, values);
     written += 1;
   }
 
   if (written === 0) {
-    yield [...lead, ...blanks(width)];
+    yield placed(region, width, []);
   }
 }
 
-function blanks(count: number): null[] {
-  return Array.from({ length: count }, () => null);
+// Built in one allocation rather than by spreading three arrays together. Every
+// row a region write is given is held until the file is written, so what this
+// costs per row is what it costs a million times over.
+//
+// The caller's own array is never handed on, so a caller reusing one array for
+// every row still works.
+function placed(
+  region: NamedRegion,
+  width: number,
+  values: readonly (CellInput | undefined)[],
+): readonly (CellInput | undefined)[] {
+  const row = new Array<CellInput | undefined>(region.firstColumnIndex + width);
+
+  for (let column = 0; column < width; column += 1) {
+    row[region.firstColumnIndex + column] = column < values.length ? values[column] : null;
+  }
+
+  return row;
 }

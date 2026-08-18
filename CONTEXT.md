@@ -368,6 +368,8 @@ This supersedes the table growth rule from decision 14. A table with a totals ro
 
 - **A region's rows are held while it is written.**
   Writing into a region reads all of its rows before the sheet goes out, because how far the sheet moves depends on how many there are, and the rows above the region are written before the ones inside it. So a region given a million rows holds a million rows.
+  The write benchmark has a `region` mode alongside `stream` and `load`, so the cost is a measured number rather than a warning. It is the one write path whose peak tracks the row count, and it is several times the streaming path at a million rows, which is why the README sends bulk exports to `appendRows`.
+  It also costs more than the `load` mode, which holds the same rows, and where that difference goes has not been chased.
   `writeRows` and `appendRows` are unaffected and stay flat, and they are the answer for bulk, where nothing sits below the rows being written and nothing has to move.
   A narrower version is possible. Rows above the region could go out before the count is known, as long as nothing up there points below, and a region is usually near the top of what it affects. That trades a clear rule for a conditional one, and nothing has yet needed it.
 
