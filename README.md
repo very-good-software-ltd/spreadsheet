@@ -316,6 +316,66 @@ await editor.save().pipeTo(Writable.toWeb(createWriteStream("invoice.xlsx")));
 The cells you write keep whatever formatting they already had.
 `writeRows` writes over the rows at that position without pushing anything down, which suits a template with a pre-formatted data region waiting to be filled.
 
+### Writing where the template says, not where you guessed
+
+`writeRows(8, ...)` is fine when the template lives beside your code and the same person changes both.
+It stops being fine when the template belongs to someone else.
+They insert a row for a subtitle, the data region moves to row 9, and your code keeps writing to row 8 with nothing to warn you.
+
+So a region can be addressed by the name its author gave it.
+In Excel that is Formulas, Name Manager, or selecting the region and typing a name into the Name Box.
+Excel keeps a name pointing at the right cells when rows move, which is exactly what a cell reference cannot do.
+
+<!-- example: write-named-region.ts -->
+
+```ts
+import { createWriteStream, openAsBlob } from "node:fs";
+import { Writable } from "node:stream";
+import { Workbook } from "@very-good-software/spreadsheet";
+
+// The template's author selected the data region in Excel and named it "Lines".
+// Writing by that name rather than by cell reference means they can insert a row
+// above it, or move the region to another sheet, without this code changing.
+const workbook = await Workbook.open(await openAsBlob("invoice-template.xlsx"));
+const editor = workbook.edit();
+
+editor.worksheet("Invoice").writeRegion("Lines", [
+  ["Consulting", 12, 950],
+  ["Expenses", 1, 240],
+]);
+
+// Rows of the region left over from the last run are cleared, so the totals row
+// underneath it can never add up stale numbers.
+await editor.save().pipeTo(Writable.toWeb(createWriteStream("invoice.xlsx")));```
+
+<!-- /example -->
+
+A name is a contract about an area, not a place to start.
+Give it fewer rows than it covers and the rest are cleared, keeping their formatting, so last month's numbers cannot sit under this month's heading looking current.
+Give it more rows than it covers and you get an error rather than a write through whatever is underneath.
+
+`worksheet.writeRegion` finds the names that worksheet owns, then the workbook-wide ones.
+`editor.writeRegion` finds only the workbook-wide ones, and writes into whichever sheet the name points at.
+That mirrors Excel, where a name can belong to one sheet or to the whole file, and a sheet's own name wins.
+
+An unknown name fails at the call.
+So does a name that cannot be written into, and the error says which kind it is, whether that is a formula, a print area, a whole column or a reference Excel broke when someone deleted a sheet.
+Being told a name is a print area is more use than being told it is missing.
+
+### Formatting is the template's job
+
+There is no API here for fonts, fills, borders, merges or column widths, and there is not going to be one.
+Those decisions belong to whoever owns the template, made in Excel or LibreOffice where you can see what you are doing.
+We think you will get a better result in ten minutes there than through any API we could offer.
+
+The case that tests this is "overdue rows should be red".
+The answer is a conditional format, set in the template against a column you write a value into.
+We copy that part across without reading it, so the rule survives and applies itself to whatever you write.
+
+If that turns out to be too thin, the next step is letting you name a cell style the template already defines.
+That would still leave the template deciding what the style looks like.
+Describing formatting from code is the thing we are not doing.
+
 ### Starting from nothing
 
 There is no separate mode for building a file.
@@ -422,7 +482,8 @@ Saving twice throws, because your row sources have already been read and the sec
 
 One template shape is worth calling out.
 If the data region has a totals block underneath it, writing more rows than the region has room for overwrites that block.
-We cannot detect it, because nothing in the file says those rows are a totals block.
+We cannot detect that from a row number, because nothing in the file says those rows are a totals block.
+Naming the region in Excel and using `writeRegion` does tell us, and then writing too many rows is an error instead.
 
 
 ## Streaming and memory

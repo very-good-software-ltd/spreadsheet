@@ -7,6 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- Write into a region by the name its author gave it, with `worksheet.writeRegion("Lines", rows)`.
+  Name a region in Excel and the template can move under your code without breaking it, which a cell reference cannot survive.
+  A name is a contract about the area it covers. Rows you do not fill are cleared, keeping their formatting, so last month's numbers cannot sit under this month's heading looking current. More rows than it holds is an error rather than a write through whatever sits underneath, which answers the totals block problem for a template that names its data region.
+  A worksheet sees the names it owns before the workbook-wide ones, matching Excel. `editor.writeRegion` sees only the workbook-wide ones and writes into whichever sheet the name points at.
+  A name that cannot be written into says what it is, whether a formula, a print area, a whole column or a reference Excel broke when a sheet was deleted, rather than reporting that the name is missing.
+  Excel Tables are not addressable yet, and matching a header row by its text is not something we will do.
+
 ## [0.2.0] - 2026-08-17
 
 ### Added
