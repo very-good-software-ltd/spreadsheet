@@ -179,7 +179,7 @@ A coordinate-to-reference helper can be added if callers want one, which also an
 Last write wins when a cell is covered twice.
 Rejecting a conflict is not implementable, since spotting the overlap would mean draining the lazy row source at call time.
 
-Deleting and renaming sheets is out, for the same reason inserting rows is: both ripple into everything that references them by name or id.
+Deleting and renaming sheets is out. A sheet's name is written into every formula that reads it, into defined names, into pivot sources and into chart series, and its id into the parts that point at it, so either one ripples through the whole package rather than through one sheet.
 
 
 ### 13. Formatting is described in the template, never in our API
@@ -219,16 +219,11 @@ This is the same reason `formula()` is a constructor.
 
 The order of anchors is deliberate.
 Named regions come first, because the author placed them on purpose, the format keeps them correct, and they cost one more element in `xl/workbook.xml`, a part we already stream at open.
-Excel Tables come second, and what growing a table means splits in two.
-Widening a table's extent to cover the rows it is given is the small half, one more part to read and two attributes to rewrite, its `ref` and its autofilter range. That is built, and it lifts the limitation recorded below that a table does not grow to cover appended rows.
-A total that survives any number of rows then comes free, as long as it is a structured reference like `=SUM(Sales[Amount])` or a whole column `=SUM(B:B)`, since neither names a row number.
-That holds only while the total sits above the data or beside it.
-A total underneath the rows, whether it is the table's own totals row or a plain cell below it, has to move down as the data grows, and moving content down is row insertion, which decision 11 refuses.
-So a table with a totals row is not grown, and says so rather than writing through it. The two halves are not one piece of work.
+Excel Tables come second. A table's writable region is the rows between its header and its totals row, since neither is a place for a caller's data, while its extent covers both.
 
-A table grows and never shrinks. Fewer rows than it holds clears the rest, exactly as a named region does, rather than pulling the extent back in. Shrinking would need to know what Excel accepts as a table's smallest extent, which we have not established, and clearing already prevents the failure that matters.
+Its extent and its autofilter range move with the rows, so a total written as a structured reference like `=SUM(Sales[Amount])`, or as a whole column `=SUM(B:B)`, keeps covering everything however many rows arrive. Neither names a row number, which is the whole reason to anchor on a table.
 
-A table's writable region is the rows between its header and its totals row, since neither is a place for a caller's data. Its extent covers both.
+Changed: a table with a totals row used to be refused, and a table used to grow but never shrink. Both existed only because nothing could move. Decision 15 moves rows, so the totals row goes down with everything else and a table pulls in as readily as it stretches.
 Matching a header row by its text does not happen.
 It is a guess wearing an anchor's clothes, and a guess that silently picks the wrong row is the failure class we turned down `insertRow` over.
 
@@ -283,7 +278,9 @@ A region shrinks to one row and no further. A range whose every endpoint is dele
 
 Excel is more forgiving here than we assumed. A range with one endpoint inside the deleted rows shrinks to what survives, rather than breaking, so `=SUM(C9:C13)` minus row 13 becomes `=SUM(C9:C12)`. Only a reference with nothing left to point at dies, which is a single cell in a deleted row or a range wholly inside them. Confirmed by hand in Excel on 2026-08-18.
 
-Writing stays a single pass except where it cannot be. Rows are counted as they go past, so anything below the region is written knowing the count. Only something written earlier that points later forces a wait, which is a summary block above the region on the same sheet, and other sheets, handled by writing the ones holding regions first. A sheet with that shape is found by scanning its formulas up to the region, which is cheap because it stops there, and only that sheet's rows are held.
+Every region is read in full before any part is written, and the moves are worked out from all of them together.
+
+This was expected to be narrower. The plan was to count rows as they went past, so that only a sheet with something above the region pointing below it would have to wait, found by scanning its formulas up to the region. Two things ruled that out. The move has to be applied to the event stream ahead of the writer, and the writer only draws on a row source as it reaches each row, so the count never arrives in time. And a formula on any sheet can name any other, so two regions whose totals read each other cannot be ordered such that both are known first. Reading them all up front answers both, and it costs the region's rows in memory, which is recorded in the open questions.
 
 This supersedes the table growth rule from decision 14. A table with a totals row was refused because that row would have to move. Now it moves, so a table grows whatever is under it, and the advice to put a total above a table goes with it.
 

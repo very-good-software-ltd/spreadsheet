@@ -10,7 +10,8 @@ Drop in an `.xlsx` or `.ods` and watch it stream in your browser.
 This library reads a spreadsheet as a stream.
 It streams the rows and does not keep them, so the memory it uses stays low even for a very large sheet.
 The same code runs in Node and in the browser, because it uses only web standard features and nothing specific to Node.
-It reads files, and it writes them: you can fill in a template or build a file from nothing, and everything you did not touch is copied across untouched.
+It reads files, and it writes them.
+Point it at a template someone designed in Excel, write to the names they gave their data, and everything else is copied across untouched.
 
 
 ## Why this library
@@ -23,6 +24,13 @@ The thing is, they were written a long time ago.
 Back then Node had no `ReadableStream` and no `DecompressionStream`, and ESM and TypeScript were nowhere near where they are now.
 So they still include their own stream code, come with a big dependency tree and build to CommonJS.
 They can't really drop any of that without breaking everyone already using them.
+
+There is also a difference in how we write.
+Both of them read a file into a model and write that model back out, so what they do not understand is not in the model and does not come back. We copy every part we are not editing across as its own bytes, which is why a chart, a pivot table or a macro survives a fill: we never look at it.
+
+That is also what makes the template model work. You write to a region the template's author named, the region ends up as tall as your data, and the rest of the sheet moves. Every formula that read those rows moves with them, on that sheet and on every other. `exceljs` has `insertRow`, but it shifts values, styles and defined names without touching formulas, so a total over rows 6 to 20 still covers rows 6 to 20 afterwards. We would rather refuse to write a file than write one that looks right and adds up wrong, so where we find something we cannot move, `save` throws and tells you what it is.
+
+The upshot is a split worth having. Whoever owns the template does the layout, the formatting and the formulas in Excel, where they can see what they are doing. Your code supplies data. There is no styling API here and there is not going to be one.
 
 We have the luxury of being able to skip most of that.
 The library is one codebase on web standards, so the same code reads a file in Node and in the browser.
@@ -333,20 +341,27 @@ import { createWriteStream, openAsBlob } from "node:fs";
 import { Writable } from "node:stream";
 import { Workbook } from "@very-good-software/spreadsheet";
 
-// The template's author selected the data region in Excel and named it "Lines".
-// Writing by that name rather than by cell reference means they can insert a row
-// above it, or move the region to another sheet, without this code changing.
+// The template's author selected the data rows in Excel and named them "Lines".
+// They also put a total underneath, styled the region, and never told anyone which
+// row anything is on, because none of that is this code's business.
 const workbook = await Workbook.open(await openAsBlob("invoice-template.xlsx"));
 const editor = workbook.edit();
 
-editor.worksheet("Invoice").writeRegion("Lines", [
-  ["Consulting", 12, 950],
-  ["Expenses", 1, 240],
-]);
+const lines = await invoiceLines();
 
-// Rows of the region left over from the last run are cleared, so the totals row
-// underneath it can never add up stale numbers.
-await editor.save().pipeTo(Writable.toWeb(createWriteStream("invoice.xlsx")));```
+// However many lines there are, the region ends up that tall. The total below it
+// moves with the rows and keeps covering all of them.
+editor.worksheet("Invoice").writeRegion("Lines", lines);
+
+await editor.save().pipeTo(Writable.toWeb(createWriteStream("invoice.xlsx")));
+
+async function invoiceLines(): Promise<(string | number)[][]> {
+  return [
+    ["Consulting", 12, 950],
+    ["Expenses", 1, 240],
+    ["Support", 3, 180],
+  ];
+}```
 
 <!-- /example -->
 
