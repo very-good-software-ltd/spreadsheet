@@ -18,8 +18,17 @@ export interface SheetInput {
   readonly hidden?: boolean;
 }
 
+export interface DefinedNameInput {
+  readonly name: string;
+  readonly target: string;
+
+  /** The zero-based sheet position the name is scoped to, if it is not workbook-wide. */
+  readonly scope?: number;
+}
+
 export interface WorkbookOptions {
   readonly date1904?: boolean;
+  readonly definedNames?: readonly DefinedNameInput[];
 }
 
 const DAY_MS = 86_400_000;
@@ -94,8 +103,15 @@ export function xlsx(sheets: readonly SheetInput[], options: WorkbookOptions = {
     })
     .join("");
   const workbookProperties = date1904 ? '<workbookPr date1904="1"/>' : "";
+  const nameElements = (options.definedNames ?? [])
+    .map((defined) => {
+      const scope = defined.scope === undefined ? "" : ` localSheetId="${defined.scope}"`;
+      return `<definedName name="${defined.name}"${scope}>${defined.target}</definedName>`;
+    })
+    .join("");
+  const definedNames = nameElements === "" ? "" : `<definedNames>${nameElements}</definedNames>`;
   files["xl/workbook.xml"] = strToU8(
-    `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${workbookProperties}<sheets>${sheetElements}</sheets></workbook>`,
+    `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${workbookProperties}<sheets>${sheetElements}</sheets>${definedNames}</workbook>`,
   );
 
   const relElements = sheets
