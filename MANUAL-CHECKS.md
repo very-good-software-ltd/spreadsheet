@@ -35,10 +35,12 @@ we were not given come back empty with their formatting, and the labels either
 side of it are untouched. So clearing works in Excel and stops at the region's
 edges.
 
+Name Manager still lists `Movements` over its range, so the names in
+`xl/workbook.xml` survive the rewrite of that part. Every expectation on the
+Checks sheet now holds.
+
 What is still worth a pass before a release is a real template, since the
-generated one has no charts or pivot tables in it. The `Movements` entry in
-Formulas, Name Manager has not been looked at yet, and it is the one item on the
-Checks sheet that is not visible from the grid.
+generated one has no charts or pivot tables in it.
 
 
 ## Start here
