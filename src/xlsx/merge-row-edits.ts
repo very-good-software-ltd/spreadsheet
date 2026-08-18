@@ -23,12 +23,16 @@ export interface RowBlock {
   readonly rows: RowSource;
   readonly inheritFrom: number | undefined;
   readonly order: number;
+
+  /** See `RowEdit.inheritIsOptional`. */
+  readonly inheritIsOptional?: boolean;
 }
 
 interface PendingRow {
   readonly number: number;
   readonly cells: ReadonlyMap<number, Claim>;
   readonly inheritFrom: number | undefined;
+  readonly inheritIsOptional?: boolean;
 }
 
 /**
@@ -54,6 +58,7 @@ export async function* mergeRowEdits(cells: readonly CellEdit[], blocks: readonl
 
     const claims = new Map<number, Claim>();
     let inheritFrom: number | undefined;
+    let inheritIsOptional = false;
 
     for (const { source, head } of waiting) {
       if (head === undefined || head.number !== next) {
@@ -67,14 +72,17 @@ export async function* mergeRowEdits(cells: readonly CellEdit[], blocks: readonl
         }
       }
 
-      inheritFrom = head.inheritFrom ?? inheritFrom;
+      if (head.inheritFrom !== undefined) {
+        inheritFrom = head.inheritFrom;
+        inheritIsOptional = head.inheritIsOptional === true;
+      }
       await source.drop();
     }
 
     yield {
       number: next,
       cells: new Map([...claims].map(([column, claim]) => [column, claim.value])),
-      ...(inheritFrom === undefined ? {} : { inheritFrom }),
+      ...(inheritFrom === undefined ? {} : { inheritFrom, inheritIsOptional }),
     };
   }
 }
@@ -113,7 +121,12 @@ async function* blockRows(block: RowBlock): AsyncIterable<PendingRow> {
   let number = block.startRow;
 
   for await (const values of block.rows) {
-    yield { number, cells: claimsOf(values, block.order), inheritFrom: block.inheritFrom };
+    yield {
+      number,
+      cells: claimsOf(values, block.order),
+      inheritFrom: block.inheritFrom,
+      ...(block.inheritIsOptional === undefined ? {} : { inheritIsOptional: block.inheritIsOptional }),
+    };
     number += 1;
   }
 }

@@ -70,20 +70,44 @@ describe("writing into a named region", () => {
     expect(rows[5]).toEqual(["left", 7, 8, 9, "right"]);
   });
 
-  it("leaves everything outside the region alone", async () => {
+  it("leaves everything outside the region alone, and keeps what is below below", async () => {
     const rows = await filledWith((editor) => editor.worksheet("Report").writeRegion("Data", [[1, 2, 3]]));
 
     expect(rows[0]).toEqual(["heading"]);
     expect(rows[3]?.[0]).toBe("left");
     expect(rows[3]?.[4]).toBe("right");
-    expect(rows[6]).toEqual(["total", "under"]);
+    expect(rows[4]).toEqual(["total", "under"]);
   });
 
-  it("clears the rows of the region it was not given, so nothing stale is left behind", async () => {
+  it("takes away the rows of the region it was not given, rather than leaving them blank", async () => {
     const rows = await filledWith((editor) => editor.worksheet("Report").writeRegion("Data", [[1, 2, 3]]));
 
-    expect(rows[4]).toEqual(["left", undefined, undefined, undefined, "right"]);
-    expect(rows[5]).toEqual(["left", undefined, undefined, undefined, "right"]);
+    expect(rows).toHaveLength(5);
+  });
+
+  it("makes room for more rows than the region held, pushing what is below down", async () => {
+    const rows = await filledWith((editor) =>
+      editor.worksheet("Report").writeRegion("Data", [
+        [1, 1, 1],
+        [2, 2, 2],
+        [3, 3, 3],
+        [4, 4, 4],
+        [5, 5, 5],
+      ]),
+    );
+
+    expect(rows[3]).toEqual(["left", 1, 1, 1, "right"]);
+    expect(rows[6]).toEqual([undefined, 4, 4, 4]);
+    expect(rows[8]).toEqual(["total", "under"]);
+  });
+
+  // Nothing is written with no data at all, but the region cannot vanish either: a
+  // total written over it would have its whole range deleted and die.
+  it("leaves one blank row when given nothing", async () => {
+    const rows = await filledWith((editor) => editor.worksheet("Report").writeRegion("Data", []));
+
+    expect(rows[3]).toEqual(["left", undefined, undefined, undefined, "right"]);
+    expect(rows[4]).toEqual(["total", "under"]);
   });
 
   it("clears the columns a short row did not reach", async () => {
@@ -98,15 +122,6 @@ describe("writing into a named region", () => {
     const rows = await filledWith((editor) => editor.worksheet("Report").writeRegion("Data", [[1, undefined, 3]]));
 
     expect(rows[3]).toEqual(["left", 1, "y", 3, "right"]);
-  });
-
-  it("refuses more rows than the region holds rather than writing past it", async () => {
-    const workbook = await Workbook.open(template());
-    const editor = workbook.edit();
-
-    editor.worksheet("Report").writeRegion("Data", [[1], [2], [3], [4]]);
-
-    await expect(bytesOf(editor.save())).rejects.toThrow('The name "Data" covers 3 rows and was given more');
   });
 
   it("refuses a row wider than the region", async () => {
@@ -190,15 +205,13 @@ describe("writing into an Excel Table by name", () => {
     expect(rows[3]).toEqual(["left", 4, 5, 6, "right"]);
   });
 
-  it("clears the data rows it was not given", async () => {
+  it("takes away the data rows it was not given", async () => {
     const workbook = await Workbook.open(withTable());
     const editor = workbook.edit();
 
     editor.worksheet("Report").writeRegion("Sales", [[1, 2, 3]]);
 
-    const rows = await cellsOf(await bytesOf(editor.save()));
-    expect(rows[4]).toEqual(["left", undefined, undefined, undefined, "right"]);
-    expect(rows[5]).toEqual(["left", undefined, undefined, undefined, "right"]);
+    expect(await cellsOf(await bytesOf(editor.save()))).toHaveLength(3);
   });
 
   it("finds the table from the workbook editor too", async () => {
@@ -255,14 +268,14 @@ describe("growing an Excel Table to fit the rows it is given", () => {
     );
 
     expect(rows[4]).toEqual([undefined, 3, 3, 3]);
-    expect(rows[5]).toEqual([undefined, 4, 4, 4]);
+    expect(rows[5]).toEqual(["", 4, 4, 4]);
   });
 
-  it("leaves the table the size it was when given fewer rows, clearing the rest", async () => {
+  it("pulls the table in when given fewer rows than it held", async () => {
     const bytes = await grown([[1, 1, 1]]);
 
-    expect(tableExtentsIn(bytes)).toEqual(["B2:D4", "B2:D4"]);
-    expect((await cellsOf(bytes))[3]).toEqual([""]);
+    expect(tableExtentsIn(bytes)).toEqual(["B2:D3", "B2:D3"]);
+    expect(await cellsOf(bytes)).toHaveLength(3);
   });
 
   it("leaves the table alone when the rows it was given fit", async () => {
@@ -276,18 +289,18 @@ describe("growing an Excel Table to fit the rows it is given", () => {
     ).toEqual(["B2:D4", "B2:D4"]);
   });
 
-  // The totals row sits under the data, so making room for another row would mean
-  // moving it down, and nothing here is ever moved.
-  it("refuses to grow a table that has a totals row", async () => {
-    await expect(
-      grown(
-        [
-          [1, 1, 1],
-          [2, 2, 2],
-          [3, 3, 3],
-        ],
-        1,
-      ),
-    ).rejects.toThrow('The table "Sales" holds 2 rows and was given more. It has a totals row underneath');
+  // The totals row sits under the data, and now it simply moves down with
+  // everything else rather than standing in the way.
+  it("grows a table that has a totals row, pushing that row down", async () => {
+    const bytes = await grown(
+      [
+        [1, 1, 1],
+        [2, 2, 2],
+        [3, 3, 3],
+      ],
+      1,
+    );
+
+    expect(tableExtentsIn(bytes)).toEqual(["B2:D6", "B2:D6"]);
   });
 });

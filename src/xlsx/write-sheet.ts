@@ -43,6 +43,14 @@ export interface RowEdit {
    * before `number`, since the sheet is read once from the top.
    */
   readonly inheritFrom?: number;
+
+  /**
+   * Whether a missing `inheritFrom` row is acceptable. A caller who named the row
+   * gets an error, since they meant a row that is not there. A region infers the
+   * row instead of being told it, and a region over rows the sheet never
+   * mentions has no formatting to copy and needs none.
+   */
+  readonly inheritIsOptional?: boolean;
 }
 
 export interface SheetWritePlan {
@@ -117,6 +125,9 @@ export async function* writeSheetPart(
 
     const inherited = inheritable.get(edit.inheritFrom);
     if (inherited === undefined) {
+      if (edit.inheritIsOptional === true) {
+        return writeRow(edit, source, undefined, context);
+      }
       throw new Error(
         `Cannot copy formatting from row ${edit.inheritFrom} onto row ${edit.number}: the sheet has no row ${edit.inheritFrom}`,
       );

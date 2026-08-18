@@ -1,7 +1,8 @@
 import type { CellInput } from "../cell-input";
 import { columnIndexOf, rowNumberOf } from "../cell-reference";
 import type { Editor, RowSource, WorksheetEditor, WriteRowsOptions } from "../editor";
-import { type RegionWrite, regionRows } from "../region-rows";
+import type { NamedRegion } from "../named-region";
+import { regionRows } from "../region-rows";
 import { createXmlReader } from "../xml/create-xml-reader";
 import type { XmlEvent, XmlReader } from "../xml/xml-reader";
 import { createZipWriter } from "../zip/create-zip-writer";
@@ -11,7 +12,9 @@ import { type CellEdit, mergeRowEdits, type RowBlock } from "./merge-row-edits";
 import type { Styles } from "./read-styles";
 import type { TableOnSheet } from "./read-tables";
 import type { WorkbookInfo } from "./read-workbook";
+import { shiftFor } from "./region-shift";
 import { type NamedThings, resolveRegion } from "./resolve-region";
+import { shiftSheetRows } from "./shift-sheet";
 import {
   type AddedWorksheet,
   asPart,
@@ -51,10 +54,18 @@ const MAX_WORKSHEET_NAME_LENGTH = 31;
 // to, so none of these can appear in one.
 const FORBIDDEN_IN_WORKSHEET_NAME = /[:\\/?*[\]]/;
 
+interface RegionEdit {
+  readonly region: NamedRegion;
+  readonly rows: RowSource;
+  readonly table: TableOnSheet | undefined;
+  readonly order: number;
+}
+
 interface SheetEdits {
   readonly cells: CellEdit[];
   readonly blocks: RowBlock[];
   readonly appended: RowSource[];
+  readonly regions: RegionEdit[];
 }
 
 interface Target {
@@ -106,35 +117,33 @@ export class XlsxEditor implements Editor {
       );
     }
 
-    this.editorFor(index).writeRows(region.firstRow, regionRows(region, rows, this.extentOf(table, region.name)));
+    this.editorFor(index);
+    this.regionEditsFor(index).push({ region, rows, table, order: this.nextOrder() });
+    this.registerGrowth(table);
 
     return this;
   }
 
-  // A table with no totals row can take more rows than it holds, and its part is
-  // rewritten at save with however far it reached. One with a totals row cannot,
-  // because that row sits under the data and would have to move down.
-  extentOf(table: TableOnSheet | undefined, name: string): RegionWrite {
-    if (table === undefined) {
-      return {};
+  // The table's part is rewritten at save with where it ended up, so it has to be
+  // kept out of the entries copied across, and that choice is made before any row
+  // has been read.
+  private registerGrowth(table: TableOnSheet | undefined): void {
+    if (table !== undefined && !this.growing.has(table.path)) {
+      this.growing.set(table.path, { lastRow: table.lastRow });
     }
+  }
 
-    if (table.totalsRowCount > 0) {
-      const held = table.lastRow - table.totalsRowCount - table.firstRow - table.headerRowCount + 1;
-      return {
-        whenFull: `The table "${name}" holds ${held} rows and was given more. It has a totals row underneath, which would have to move down, and nothing here is ever moved`,
-      };
+  private regionEditsFor(index: number): RegionEdit[] {
+    const edits = this.edits.get(index);
+    if (edits === undefined) {
+      throw new Error(`No edits for worksheet ${index}`);
     }
+    return edits.regions;
+  }
 
-    const existing = this.growing.get(table.path);
-    if (existing !== undefined) {
-      return { growth: existing };
-    }
-
-    const growth = { lastRow: table.lastRow };
-    this.growing.set(table.path, growth);
-
-    return { growth };
+  private nextOrder(): number {
+    this.calls += 1;
+    return this.calls;
   }
 
   addWorksheet(name: string): WorksheetEditor {
@@ -252,35 +261,69 @@ export class XlsxEditor implements Editor {
         continue;
       }
 
-      parts.set(target.path, () =>
-        writeSheetPart(
-          target.added ? emptyWorksheet() : this.xml.read(this.archive.openStream(target.path)),
-          {
-            positioned: mergeRowEdits(edits?.cells ?? [], edits?.blocks ?? []),
-            appended: appendedRows(edits?.appended ?? []),
-            inheritedRows: inheritedRows(edits?.blocks ?? []),
-          },
-          { dateStyles, date1904: this.workbook.date1904 },
-        ),
-      );
+      parts.set(target.path, () => this.sheetPart(target, edits, dateStyles));
     }
 
     return parts;
   }
 
+  // A region is the one edit that moves the rest of the sheet, so its rows are read
+  // before anything is written. How far the sheet moves depends on how many there
+  // are, and the rows above the region go out before the ones inside it.
+  private async *sheetPart(
+    target: Target,
+    edits: SheetEdits | undefined,
+    dateStyles: DateStyleTable,
+  ): AsyncIterable<string> {
+    const source = (): AsyncIterable<readonly XmlEvent[]> =>
+      target.added ? emptyWorksheet() : this.xml.read(this.archive.openStream(target.path));
+
+    const region = firstRegion(edits, target.name);
+    const blocks = [...(edits?.blocks ?? [])];
+    let events = source();
+
+    if (region !== undefined) {
+      const rows = await collect(regionRows(region.region, region.rows));
+      const shift = shiftFor(region.region, rows.length);
+
+      blocks.push({
+        startRow: region.region.firstRow,
+        rows,
+        inheritFrom: region.region.firstRow,
+        inheritIsOptional: true,
+        order: region.order,
+      });
+
+      if (shift !== undefined) {
+        events = shiftSheetRows(events, shift);
+        const growth = region.table === undefined ? undefined : this.growing.get(region.table.path);
+        if (growth !== undefined && region.table !== undefined) {
+          growth.lastRow = region.table.lastRow + shift.by;
+        }
+      }
+    }
+
+    yield* writeSheetPart(
+      events,
+      {
+        positioned: mergeRowEdits(edits?.cells ?? [], blocks),
+        appended: appendedRows(edits?.appended ?? []),
+        inheritedRows: inheritedRows(blocks),
+      },
+      { dateStyles, date1904: this.workbook.date1904 },
+    );
+  }
+
   private editorFor(index: number): WorksheetEditor {
-    const edits = this.edits.get(index) ?? { cells: [], blocks: [], appended: [] };
+    const edits = this.edits.get(index) ?? { cells: [], blocks: [], appended: [], regions: [] };
     this.edits.set(index, edits);
 
     return new XlsxWorksheetEditor(
       edits,
       this.named,
       this.targets[index]?.name ?? "",
-      (table, name) => this.extentOf(table, name),
-      () => {
-        this.calls += 1;
-        return this.calls;
-      },
+      (table) => this.registerGrowth(table),
+      () => this.nextOrder(),
     );
   }
 
@@ -327,7 +370,7 @@ class XlsxWorksheetEditor implements WorksheetEditor {
     private readonly edits: SheetEdits,
     private readonly named: NamedThings,
     private readonly sheetName: string,
-    private readonly extentOf: (table: TableOnSheet | undefined, name: string) => RegionWrite,
+    private readonly registerGrowth: (table: TableOnSheet | undefined) => void,
     private readonly nextOrder: () => number,
   ) {}
 
@@ -377,8 +420,35 @@ class XlsxWorksheetEditor implements WorksheetEditor {
   writeRegion(name: string, rows: RowSource): this {
     const { region, table } = resolveRegion(this.named, name, this.sheetName);
 
-    return this.writeRows(region.firstRow, regionRows(region, rows, this.extentOf(table, region.name)));
+    this.edits.regions.push({ region, rows, table, order: this.nextOrder() });
+    this.registerGrowth(table);
+
+    return this;
   }
+}
+
+async function collect<T>(rows: AsyncIterable<T>): Promise<T[]> {
+  const collected: T[] = [];
+
+  for await (const row of rows) {
+    collected.push(row);
+  }
+
+  return collected;
+}
+
+// Only one region can be written per worksheet. Two would each move the sheet under
+// the other, and the second's rows would be aimed at where the first used to be.
+function firstRegion(edits: SheetEdits | undefined, sheet: string): RegionEdit | undefined {
+  const regions = edits?.regions ?? [];
+
+  if (regions.length > 1) {
+    throw new Error(
+      `Worksheet "${sheet}" has ${regions.length} regions written to it. Writing one moves the rows the others were aimed at, so only one region per worksheet can be written`,
+    );
+  }
+
+  return regions[0];
 }
 
 // Every block declares which row it copies formatting from up front, even though
@@ -388,7 +458,7 @@ function inheritedRows(blocks: readonly RowBlock[]): ReadonlySet<number> {
 }
 
 function hasEdits(edits: SheetEdits): boolean {
-  return edits.cells.length > 0 || edits.blocks.length > 0 || edits.appended.length > 0;
+  return edits.cells.length > 0 || edits.blocks.length > 0 || edits.appended.length > 0 || edits.regions.length > 0;
 }
 
 // A part is produced a row at a time, and each row is small. Encoding and handing

@@ -339,6 +339,7 @@ This supersedes the table growth rule from decision 14. A table with a totals ro
   `formula()` exists as the boundary where that translation would go.
 - **How faithful is a rewritten part.**
   Untouched entries are copied as bytes and are exactly identical, checksum and compressed size included, so nothing is recompressed.
+  Writing into a table rewrites that table's part even when the table did not change size, because whether to copy an entry or rebuild it is decided before any row has been read and the size is only known afterwards. The result is semantically identical, so this costs byte-identity on one small part and nothing else.
   Five parts are rewritten: the edited sheets, `xl/styles.xml`, `xl/workbook.xml`, and, only when there was a calculation chain to drop, `[Content_Types].xml` and `xl/_rels/workbook.xml.rels`.
   A rewritten part is re-emitted from the XML event stream, which does not carry attribute order, self-closing tag spelling, comments or processing instructions. So it is semantically equivalent but not byte-identical, and the byte-identity test can only cover the parts we did not touch. Whether that gap ever matters is unknown.
 - **Recalculation and the zip's shape (resolved).**
@@ -363,6 +364,11 @@ This supersedes the table growth rule from decision 14. A table with a totals ro
   The writer parses defined names anyway, so exposing the resolved names and their extents to a reader is a small surface for free parsing.
   The case that would earn it is an input workbook, a filled-in form whose values live in named cells, where the name survives an author moving the cell and a coordinate does not.
   Not a priority. A region read is a different shape from the row stream the read API is, and nobody has asked for either.
+
+- **A region's rows are held while it is written.**
+  Writing into a region reads all of its rows before the sheet goes out, because how far the sheet moves depends on how many there are, and the rows above the region are written before the ones inside it. So a region given a million rows holds a million rows.
+  `writeRows` and `appendRows` are unaffected and stay flat, and they are the answer for bulk, where nothing sits below the rows being written and nothing has to move.
+  A narrower version is possible. Rows above the region could go out before the count is known, as long as nothing up there points below, and a region is usually near the top of what it affects. That trades a clear rule for a conditional one, and nothing has yet needed it.
 
 - **A grown table's `sortState`.**
   A table part can hold a `sortState` recording the last sort applied to it, with its own `ref` over the data. We rewrite the table's extent and its autofilter range when it grows, and leave `sortState` as it was.

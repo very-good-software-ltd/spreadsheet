@@ -64,15 +64,20 @@ const EXPECTATIONS = [
   ],
   [
     "Summary rows 4 and 5",
-    "Empty of numbers, borders and shading unchanged",
-    "Rows of the region we were not given were cleared, so last run's figures cannot pass as this run's",
+    "Gone. February and March are not on the sheet at all",
+    "A region given one row keeps one row, and the two it did not need were taken out whole",
   ],
   [
-    "Summary!A4 and A5",
-    "Still say February and March",
-    "Clearing stopped at the region's edge and left the labels beside it alone",
+    "Summary!A5",
+    "Reads Total, where the template had it at A7",
+    "Everything under the region came up by the two rows that went away",
   ],
-  ["Summary!E3", "Still says 'keep me'", "Clearing stopped at the region's right edge too"],
+  [
+    "Summary!B5",
+    "Reads 120, and the formula bar shows SUM(B3:B3)",
+    "The total was written over the region's rows and followed it as it shrank, instead of breaking or summing the wrong ones",
+  ],
+  ["Summary!E3", "Still says 'keep me'", "A row that stayed kept everything on it"],
   [
     "Formulas, Name Manager",
     "Still lists Movements over Summary!$B$3:$D$5",
@@ -80,7 +85,7 @@ const EXPECTATIONS = [
   ],
   [
     "Ledger rows 3 to 7",
-    "Five entries, all banded and filtered like the table",
+    "Five entries, all banded and filtered like the table, with Total still above them",
     "A table with room for two grew to take five, and Excel still treats the new rows as part of it",
   ],
   [
@@ -161,11 +166,17 @@ async function buildTemplate() {
   });
 
   // A region the author named, filled with figures from a previous run. The fill
-  // writes one row into it, so the other two have to come back empty rather than
-  // still showing these.
+  // writes one row into it, so two rows have to go away and everything under them
+  // has to come up, the total included.
   const summary = workbook.addWorksheet("Summary");
   summary.getCell("A1").value = "Movements by month";
   summary.getCell("A1").font = { bold: true };
+  summary.getCell("A7").value = "Total";
+  summary.getCell("A7").font = { bold: true };
+  // Written over the region's rows, so shrinking the region has to rewrite it. The
+  // cached result is wrong for the data about to arrive, as everywhere else here.
+  summary.getCell("B7").value = { formula: "SUM(B3:B5)", result: 0 };
+  summary.getCell("B7").font = { bold: true };
   for (const [row, month] of [
     [3, "January"],
     [4, "February"],
