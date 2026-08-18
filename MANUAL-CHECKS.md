@@ -39,6 +39,12 @@ Name Manager still lists `Movements` over its range, so the names in
 `xl/workbook.xml` survive the rewrite of that part. Every expectation on the
 Checks sheet now holds.
 
+Checked again on 2026-08-18, after tables landed. `Ledger!D1` reads 150, so
+`SUM(Entries[Amount])` covered all five rows written into a table that had room
+for two. A structured reference resolves over the table's extent and nothing else,
+so that number is Excel agreeing the table grew, not just that the rows are on the
+sheet. Growing a table's extent and its filter's is therefore confirmed.
+
 What is still worth a pass before a release is a real template, since the
 generated one has no charts or pivot tables in it.
 
@@ -177,9 +183,9 @@ The total is above the table on purpose. Put it underneath and the table cannot
 grow at all, because that row would have to move down, which is the thing we do
 not do.
 
-Clicking inside the last row and looking for Table Design on the ribbon is the
-same question asked a different way. Rows can look banded and filtered while
-sitting outside the table, and only Excel can tell you which it is.
+Clicking inside the last row and looking for Table Design on the ribbon asks the
+same question more weakly, and is only worth doing if the total looks wrong and
+you want to see where it went wrong.
 
 
 ## Whether a name's case matters
