@@ -190,18 +190,17 @@ you want to see where it went wrong.
 
 ## Whether a name's case matters
 
+Settled on 2026-08-18, so this needs no repeating unless the lookup changes.
+
 We look a defined name up without regard to case, so a caller asking for `data`
-finds a name the template spells `Data`. That is what we believe Excel does, and
-no test here can prove it, because a file cannot show you a rule about names it
-does not contain.
+finds a name the template spells `Data`. No test here can prove that is Excel's
+rule, because a file cannot show you a rule about names it does not contain.
 
-To check it, in Excel: Formulas, Name Manager, New, and define `Data` over any
-range. Then New again and try to define `data` over a different range.
-
-We expect Excel to refuse the second one, saying the name already exists. If it
-accepts both, then a workbook can hold two names differing only in case, our
-lookup would pick whichever comes first in the file, and the rule needs changing
-to match exactly before falling back.
+Checked by hand instead: Formulas, Name Manager, New, define `Data` over a range,
+then New again and define `data` over a different one. Excel refuses the second
+with "This name already exists. Names should be unique". So a workbook cannot hold
+two names differing only in case, and matching without regard to case cannot pick
+the wrong one of a pair that cannot exist.
 
 
 ## Known and accepted

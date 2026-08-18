@@ -83,8 +83,10 @@ function dataRegionOf(table: TableOnSheet, worksheet: string | undefined): Named
   };
 }
 
-// Excel matches a name without regard to case, and its Name Manager will not
-// define two that differ only in case, so a lookup does not either.
+// Excel will not define two names differing only in case: its Name Manager refuses
+// the second with "This name already exists. Names should be unique" (confirmed by
+// hand on 2026-08-18, see MANUAL-CHECKS.md). So a pair we could pick the wrong one
+// of cannot exist, and matching without regard to case is safe.
 function find(
   definedNames: readonly DefinedNameRef[],
   name: string,
