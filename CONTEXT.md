@@ -183,6 +183,72 @@ Rejecting a conflict is not implementable, since spotting the overlap would mean
 Deleting and renaming sheets is out, for the same reason inserting rows is: both ripple into everything that references them by name or id.
 
 
+### 13. Formatting is described in the template, never in our API
+
+The writer will never grow a way to describe formatting.
+No fonts, fills, borders, merges, column widths or number formats.
+Those decisions belong to whoever owns the template, made visually in Excel or LibreOffice, where the feedback is immediate and the tool is better than any API we could offer.
+
+The pressure on this never arrives as a request for a styling API.
+It arrives as "overdue rows should be red", which is reasonable and which every other library answers with a formatting object.
+Our answer is conditional formatting in the template, driven by a value we write.
+The author sets the rule in Excel against a column we fill, so the rule survives untouched because we copy the part through without reading it.
+
+The escape hatch we will build if that proves too thin is pointing at a named cell style the template already defines, an entry in `styles.xml` `cellStyles` that the author created in Excel.
+That adds a reference, not a vocabulary, so the template still owns what the style means and we only own which one applies.
+It is deliberately not in the first version, because we want to find out whether conditional formatting actually suffices before adding surface we cannot remove.
+
+The line, stated positively: the library lets a caller point at formatting the template already has, and never lets them describe formatting of their own.
+
+Changed: this used to be an absence rather than a decision.
+The writer shipped with no styling surface because none was needed yet, which reads the same from outside as a gap waiting to be filled.
+It is now a position.
+
+
+### 14. Writing is anchored to what the template names, not only to coordinates
+
+There are two kinds of template and we serve both.
+One is a developer artifact, checked in beside the code, changed in the same commit as the call site.
+Coordinates are fine there, and `set("C3", value)` is no worse than any other constant.
+The other is a business artifact, owned by whoever needs the report, edited in Excel without telling anyone.
+There a coordinate is a silent wrong-cell bug the first time someone inserts a row for a subtitle.
+
+So a caller can also address a named region, and the name is the contract between the template's author and the code.
+Excel maintains a name across insertion and deletion, which is exactly the case a coordinate cannot survive.
+The vocabulary is ours and neutral, a named region of cells, not the format's word for it, so ODF's named expressions can back the same API later.
+This is the same reason `formula()` is a constructor.
+
+The order of anchors is deliberate.
+Named regions come first, because the author placed them on purpose, the format keeps them correct, and they cost one more element in `xl/workbook.xml`, a part we already stream at open.
+Excel Tables come second, and what growing a table means splits in two.
+Widening a table's extent to cover appended rows is the small half, one more part to read and two attributes to rewrite, its `ref` and the autofilter range. That lifts the limitation recorded below, that a table does not grow to cover appended rows.
+A total that survives any number of rows then comes free, as long as it is a structured reference like `=SUM(Sales[Amount])` or a whole column `=SUM(B:B)`, since neither names a row number.
+That holds only while the total sits above the data or beside it.
+A total underneath the rows, whether it is the table's own totals row or a plain cell below it, has to move down as the data grows, and moving content down is row insertion, which decision 11 refuses.
+So the first half is worth building and the second is the insertion problem again. They are not one piece of work.
+None of this has been checked against real Excel, and no fixture in the repo contains a table.
+Matching a header row by its text does not happen.
+It is a guess wearing an anchor's clothes, and a guess that silently picks the wrong row is the failure class we turned down `insertRow` over.
+
+A named region is a contract about an area, not a starting coordinate.
+More rows than the region holds throws before anything is written, rather than spilling past the bottom edge into whatever the author put there.
+Fewer rows than the region holds clears the remainder, keeping the formatting, because rows left over from the last run are last month's numbers in this month's report and nothing about them looks wrong.
+This is what closes the totals-block gap in the open questions below.
+We could not detect a totals block because we did not know where the data region ended.
+A named region is the author telling us.
+
+The rigidity is the point, and it is also the cost.
+A region that must fit exactly will not suit a caller whose data varies in length.
+That caller wants `appendRows`, which promises nothing about what is below, or an Excel Table once those land.
+
+`<definedNames>` holds far more than named boxes, so only part of it is addressable: a single area, absolute, in this workbook, pointing at cells, and not one of Excel's own `_xlnm.` entries.
+A name that is a constant, a formula, a multi-area range, a relative reference, an external workbook reference or a `#REF!` left behind by a deleted sheet throws at the call and says which of those it is.
+A whole column name like `Sheet1!$B:$B` throws too, since clearing the remainder of a region a million rows tall is not a thing to attempt.
+Print areas are refused along with the other built-ins, which we can revisit if anyone asks.
+A name is either global or scoped to one sheet, and a sheet-scoped name shadows a global one, so the sheet's editor resolves its own names first and the workbook's editor sees only global ones.
+The shadowing is visible in the API rather than a rule to remember.
+
+
 ## Open questions
 
 - **Cell value typing (resolved).**
@@ -248,10 +314,21 @@ Deleting and renaming sheets is out, for the same reason inserting rows is: both
   An Excel Table in the template does not grow to cover appended rows, and a chart pointing at a fixed range does not extend.
   A digitally signed workbook has its signature invalidated by any modification, which is inherent and not fixable.
   A template whose data region sits above a totals block is not served: writing past the region overwrites the totals, and we cannot detect it because we do not know those rows are a totals block.
+  Decision 14 answers this for a template whose data region carries a name, since the name is the author telling us where the region ends. It stays true for one addressed only by coordinates.
 - **Verifying the writer needs real files (partly done).**
   In place: the byte-identity test in `test/xlsx/write-fidelity.test.ts` fills a file `exceljs` wrote and asserts every entry we did not rewrite comes out with the same checksum, compressed size and bytes, including the theme and document properties, which we have no reader for at all. `exceljs` and `xlsx` both read the output back. The loop is guarded by naming parts it must have checked, so it cannot pass by checking nothing.
   Still missing: a real template with charts, pivot tables and conditional formatting. What `exceljs` writes has no part that exercises those, so the most valuable case is still unproven.
   Excel offering to repair a file is the failure that matters most and no library round-trip catches it. That is a manual check, listed in `MANUAL-CHECKS.md`.
+- **Reading by name (parked).**
+  The writer parses defined names anyway, so exposing the resolved names and their extents to a reader is a small surface for free parsing.
+  The case that would earn it is an input workbook, a filled-in form whose values live in named cells, where the name survives an author moving the cell and a coordinate does not.
+  Not a priority. A region read is a different shape from the row stream the read API is, and nobody has asked for either.
+
 - **Writing `.ods`.**
-  Out of scope. It shares the zip and XML writing layers and nothing else, since the fidelity work is per format.
-  It would also force the formula translation question above, because `formula()` cannot pass its text through untranslated.
+  Deferred, and not decided against. Writing only one of the two formats we read is a real asymmetry and we are not calling it the end state.
+  What it costs is now clearer than it was, and the cost went up rather than down.
+  It shares the zip and XML writing layers and nothing else, since the fidelity work is per format.
+  It forces the formula translation question above, because `formula()` cannot pass its text through untranslated.
+  And the copy-through guarantee is structurally weaker there. In xlsx an edit rewrites the sheet part plus at most four small ones and every other entry is copied byte-identical, which `test/xlsx/write-fidelity.test.ts` asserts. ODF keeps every sheet, every automatic style and every conditional format in one `content.xml`, so editing one cell sends the whole document back through the XML event stream, which as noted above does not carry attribute order, self-closing spelling, comments or processing instructions. The gap that covers a handful of parts in xlsx would cover everything in ods.
+  Decision 13 removes one cost, since there is no styling API to build twice. Decision 14's anchors port, since ODF has named expressions with cell range addresses, spelled `Sheet1.B4:Sheet1.D20` rather than `Sheet1!$B$4:$D$20`.
+  Revisit once the anchor work has landed for xlsx and we know what the second implementation would actually repeat.
