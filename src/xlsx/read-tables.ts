@@ -39,6 +39,11 @@ export interface TableRef {
   readonly totalsRowCount: number;
 }
 
+/** A table together with the worksheet it sits on. */
+export interface TableOnSheet extends TableRef {
+  readonly sheet: string;
+}
+
 /** Every table on the worksheet at `sheetPath`, in the order it points at them. */
 export async function readTables(archive: ZipArchive, xml: XmlReader, sheetPath: string): Promise<readonly TableRef[]> {
   const relationships = await readRelationships(archive, xml, sheetPath);

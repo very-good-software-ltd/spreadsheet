@@ -152,3 +152,60 @@ describe("writing into a named region", () => {
     ).toThrow('No name "Nope" on worksheet "Report" or in this workbook');
   });
 });
+
+// A table over B2:D6: its heading row, then four rows of data holding a previous
+// run's figures, with the labels either side of it left out of the table.
+function withTable() {
+  const stale = [9, 9, 9];
+  return xlsx([
+    {
+      name: "Report",
+      rows: [
+        [],
+        ["", "Item", "Qty", "Amount", "keep me"],
+        ["left", ...stale, "right"],
+        ["left", ...stale, "right"],
+        ["left", ...stale, "right"],
+        ["left", ...stale, "right"],
+      ],
+      tables: [{ name: "Sales", ref: "B2:D6", headerRowCount: 1 }],
+    },
+  ]);
+}
+
+describe("writing into an Excel Table by name", () => {
+  it("writes its data rows and leaves the heading row alone", async () => {
+    const workbook = await Workbook.open(withTable());
+    const editor = workbook.edit();
+
+    editor.worksheet("Report").writeRegion("Sales", [
+      [1, 2, 3],
+      [4, 5, 6],
+    ]);
+
+    const rows = await cellsOf(await bytesOf(editor.save()));
+    expect(rows[1]).toEqual(["", "Item", "Qty", "Amount", "keep me"]);
+    expect(rows[2]).toEqual(["left", 1, 2, 3, "right"]);
+    expect(rows[3]).toEqual(["left", 4, 5, 6, "right"]);
+  });
+
+  it("clears the data rows it was not given", async () => {
+    const workbook = await Workbook.open(withTable());
+    const editor = workbook.edit();
+
+    editor.worksheet("Report").writeRegion("Sales", [[1, 2, 3]]);
+
+    const rows = await cellsOf(await bytesOf(editor.save()));
+    expect(rows[4]).toEqual(["left", undefined, undefined, undefined, "right"]);
+    expect(rows[5]).toEqual(["left", undefined, undefined, undefined, "right"]);
+  });
+
+  it("finds the table from the workbook editor too", async () => {
+    const workbook = await Workbook.open(withTable());
+    const editor = workbook.edit();
+
+    editor.writeRegion("Sales", [[1, 2, 3]]);
+
+    expect((await cellsOf(await bytesOf(editor.save())))[2]).toEqual(["left", 1, 2, 3, "right"]);
+  });
+});

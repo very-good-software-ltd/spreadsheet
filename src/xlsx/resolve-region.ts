@@ -1,4 +1,5 @@
 import type { NamedRegion } from "../named-region";
+import type { TableOnSheet } from "./read-tables";
 import type { DefinedNameRef } from "./read-workbook";
 
 /**
@@ -12,11 +13,25 @@ import type { DefinedNameRef } from "./read-workbook";
  * cannot be written, saying which, or when it points at a different worksheet
  * than the one asking.
  */
-export function resolveRegion(definedNames: readonly DefinedNameRef[], name: string, worksheet?: string): NamedRegion {
+export interface NamedThings {
+  readonly definedNames: readonly DefinedNameRef[];
+  readonly tables: readonly TableOnSheet[];
+}
+
+export function resolveRegion(named: NamedThings, name: string, worksheet?: string): NamedRegion {
+  const { definedNames, tables } = named;
   const found =
     (worksheet === undefined ? undefined : find(definedNames, name, worksheet)) ?? find(definedNames, name, undefined);
 
   if (found === undefined) {
+    // Excel keeps tables and defined names in one namespace and will not let a
+    // workbook hold both spellings, so which of the two is looked at first cannot
+    // decide anything in a file it wrote.
+    const table = tables.find((candidate) => sameName(candidate.name, name));
+    if (table !== undefined) {
+      return dataRegionOf(table, worksheet);
+    }
+
     throw new Error(
       worksheet === undefined
         ? `No name "${name}" in this workbook`
@@ -35,6 +50,30 @@ export function resolveRegion(definedNames: readonly DefinedNameRef[], name: str
   const { sheet, firstRow, lastRow, firstColumnIndex, lastColumnIndex } = found.target;
 
   return { name: found.name, sheet, firstRow, lastRow, firstColumnIndex, lastColumnIndex };
+}
+
+// A table's extent covers its header row and its totals row, and neither is a
+// place for a caller's data, so what is writable is the rows between them.
+function dataRegionOf(table: TableOnSheet, worksheet: string | undefined): NamedRegion {
+  if (worksheet !== undefined && table.sheet !== worksheet) {
+    throw new Error(`The name "${table.name}" points at worksheet "${table.sheet}", not "${worksheet}"`);
+  }
+
+  const firstRow = table.firstRow + table.headerRowCount;
+  const lastRow = table.lastRow - table.totalsRowCount;
+
+  if (lastRow < firstRow) {
+    throw new Error(`The table "${table.name}" has no rows between its header and its totals row`);
+  }
+
+  return {
+    name: table.name,
+    sheet: table.sheet,
+    firstRow,
+    lastRow,
+    firstColumnIndex: table.firstColumnIndex,
+    lastColumnIndex: table.lastColumnIndex,
+  };
 }
 
 // Excel matches a name without regard to case, and its Name Manager will not
