@@ -84,8 +84,8 @@ const EXPECTATIONS = [
   ["Summary!E3", "Still says 'keep me'", "A row that stayed kept everything on it"],
   [
     "The image on Summary",
-    "Still two rows below Total, at about row 7",
-    "A picture anchored below the region came up with the rows. Four rows of gap means it did not move, and a chart is anchored the same way",
+    "Starts on row 7, with exactly one empty row between it and Total",
+    "A picture anchored below the region came up with the rows. Three empty rows means it did not move, and a chart is anchored the same way",
   ],
   [
     "Formulas, Name Manager",
