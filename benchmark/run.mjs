@@ -31,6 +31,7 @@ const WRITE_RUNS = [
   ["@very-good-software/spreadsheet", "stream"],
   ["@very-good-software/spreadsheet", "load"],
   ["@very-good-software/spreadsheet", "region"],
+  ["@very-good-software/spreadsheet", "region-lazy"],
   ["exceljs", "stream"],
   ["exceljs", "load"],
   ["xlsx", "load"],
@@ -115,22 +116,22 @@ function report(outcome, label, measure) {
 for (const file of targets) {
   console.log(`\n${file}${cap ? `  (heap cap ${cap}MB)` : ""}`);
   console.log(
-    `  ${pad("library", 35)} ${pad("mode", 7)} ${padStart("cells", 10)} ${padStart("time", 9)} ${padStart("peak RSS", 10)}`,
+    `  ${pad("library", 35)} ${pad("mode", 12)} ${padStart("cells", 10)} ${padStart("time", 9)} ${padStart("peak RSS", 10)}`,
   );
   for (const [library, mode] of runsFor(file)) {
-    report(run(reader, library, mode, file), `  ${pad(library, 35)} ${pad(mode, 7)}`, (outcome) => outcome.cells);
+    report(run(reader, library, mode, file), `  ${pad(library, 35)} ${pad(mode, 12)}`, (outcome) => outcome.cells);
   }
 }
 
 for (const count of rowCounts) {
   console.log(`\nwriting ${count.toLocaleString("en-GB")} rows${cap ? `  (heap cap ${cap}MB)` : ""}`);
   console.log(
-    `  ${pad("library", 35)} ${pad("mode", 7)} ${padStart("file", 10)} ${padStart("time", 9)} ${padStart("peak RSS", 10)}`,
+    `  ${pad("library", 35)} ${pad("mode", 12)} ${padStart("file", 10)} ${padStart("time", 9)} ${padStart("peak RSS", 10)}`,
   );
   for (const [library, mode] of WRITE_RUNS) {
     report(
       run(writer, library, mode, count),
-      `  ${pad(library, 35)} ${pad(mode, 7)}`,
+      `  ${pad(library, 35)} ${pad(mode, 12)}`,
       (outcome) => `${(outcome.bytes / 1e6).toFixed(1)}MB`,
     );
   }

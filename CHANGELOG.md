@@ -9,11 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- Filling a region allocates one array per row instead of three, which lowered its peak memory by about an eighth on a million rows. Nothing about the output changes.
+- Filling a region is faster and holds less. A million rows went from 7.4s to 5.6s, and a lazy source now needs about a 400MB heap where it needed more than 500MB. Nothing about the output changes.
+  Rows from a source whose length is not known up front are held as one flat run of values rather than as an array each, and an array source is not drained at all, since it already says how long it is.
 
 ### Added
 
-- A `region` mode in the write benchmark, so the memory cost of filling a region sits next to the streaming and load-everything paths rather than being described in prose. `npm run benchmark -- --write=1000000`.
+- `region` and `region-lazy` modes in the write benchmark, so the memory cost of filling a region sits next to the streaming and load-everything paths rather than being described in prose. `npm run benchmark -- --write=1000000`, and add `--cap=500` to see what is actually held rather than what the runtime has not given back.
 
 ## [0.3.0] - 2026-08-18
 

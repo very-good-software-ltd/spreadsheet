@@ -2,7 +2,7 @@ import type { CellInput } from "../cell-input";
 import { columnIndexOf, rowNumberOf } from "../cell-reference";
 import type { Editor, RowSource, WorksheetEditor, WriteRowsOptions } from "../editor";
 import type { NamedRegion } from "../named-region";
-import { regionRows } from "../region-rows";
+import { readRegionRows } from "../region-rows";
 import { createXmlReader } from "../xml/create-xml-reader";
 import type { XmlEvent, XmlReader } from "../xml/xml-reader";
 import { createZipWriter } from "../zip/create-zip-writer";
@@ -410,8 +410,8 @@ export class XlsxEditor implements Editor {
         continue;
       }
 
-      const rows = await collect(regionRows(region.region, region.rows));
-      const shift = shiftFor(region.region, rows.length);
+      const rows = await readRegionRows(region.region, region.rows);
+      const shift = shiftFor(region.region, rows.count);
 
       if (shift !== undefined && region.table !== undefined) {
         const growth = this.growing.get(region.table.path);
@@ -426,7 +426,7 @@ export class XlsxEditor implements Editor {
         shift,
         block: {
           startRow: region.region.firstRow,
-          rows,
+          rows: rows.rows(),
           inheritFrom: region.region.firstRow,
           inheritIsOptional: true,
           order: region.order,
@@ -562,16 +562,6 @@ class XlsxWorksheetEditor implements WorksheetEditor {
 
     return this;
   }
-}
-
-async function collect<T>(rows: AsyncIterable<T>): Promise<T[]> {
-  const collected: T[] = [];
-
-  for await (const row of rows) {
-    collected.push(row);
-  }
-
-  return collected;
 }
 
 // Only one region can be written per worksheet. Two would each move the sheet under

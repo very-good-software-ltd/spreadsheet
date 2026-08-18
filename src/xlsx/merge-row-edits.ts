@@ -44,6 +44,16 @@ interface PendingRow {
  * rows costs one row of memory here.
  */
 export async function* mergeRowEdits(cells: readonly CellEdit[], blocks: readonly RowBlock[]): AsyncIterable<RowEdit> {
+  // With one block and nothing to merge it with, the merge is the whole cost: a
+  // promise for every source on every row, a claim for every cell, and two maps
+  // built to resolve a competition that cannot happen. Filling a region is exactly
+  // that shape, and at a million rows it is most of what is allocated.
+  const only = blocks[0];
+  if (cells.length === 0 && blocks.length === 1 && only !== undefined) {
+    yield* soleBlockRows(only);
+    return;
+  }
+
   const sources = [lookahead(cellRows(cells)), ...blocks.map((block) => lookahead(blockRows(block)))];
 
   for (;;) {
@@ -114,6 +124,29 @@ async function* cellRows(cells: readonly CellEdit[]): AsyncIterable<PendingRow> 
 
   for (const [number, cells] of [...byRow].sort(([left], [right]) => left - right)) {
     yield { number, cells, inheritFrom: undefined };
+  }
+}
+
+async function* soleBlockRows(block: RowBlock): AsyncIterable<RowEdit> {
+  let number = block.startRow;
+
+  for await (const values of block.rows) {
+    const cells = new Map<number, CellInput>();
+
+    for (const [column, value] of values.entries()) {
+      if (value !== undefined) {
+        cells.set(column, value);
+      }
+    }
+
+    yield {
+      number,
+      cells,
+      ...(block.inheritFrom === undefined
+        ? {}
+        : { inheritFrom: block.inheritFrom, inheritIsOptional: block.inheritIsOptional === true }),
+    };
+    number += 1;
   }
 }
 

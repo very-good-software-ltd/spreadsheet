@@ -23,6 +23,8 @@ const Attribute = {
   Space: "xml:space",
 } as const;
 
+const EMPTY_COLUMNS: ReadonlyMap<number, SourceCell> = new Map();
+
 const CellTypeCode = {
   Boolean: "b",
   InlineString: "inlineStr",
@@ -255,6 +257,23 @@ async function* parseSheet(events: AsyncIterable<readonly XmlEvent[]>): AsyncIte
   }
 }
 
+// The row a block copies formatting from is the same row for every row of that
+// block, so its columns are indexed once and kept rather than rebuilt a million
+// times over.
+const columnIndexes = new WeakMap<readonly SourceCell[], ReadonlyMap<number, SourceCell>>();
+
+function byColumnCached(cells: readonly SourceCell[]): ReadonlyMap<number, SourceCell> {
+  const held = columnIndexes.get(cells);
+  if (held !== undefined) {
+    return held;
+  }
+
+  const indexed = byColumn(cells);
+  columnIndexes.set(cells, indexed);
+
+  return indexed;
+}
+
 function byColumn(cells: readonly SourceCell[]): ReadonlyMap<number, SourceCell> {
   return new Map(cells.map((cell) => [cell.columnIndex, cell]));
 }
@@ -286,7 +305,7 @@ function writeRow(
   context: SheetWriteContext,
 ): string {
   const existing = byColumn(source?.cells ?? []);
-  const inheritedCells = byColumn(inherited?.cells ?? []);
+  const inheritedCells = inherited === undefined ? EMPTY_COLUMNS : byColumnCached(inherited.cells);
   const columns = [...new Set([...existing.keys(), ...edit.cells.keys()])].sort((a, b) => a - b);
 
   // A row the sheet does not have takes the shape of the row it inherits from,

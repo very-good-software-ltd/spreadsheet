@@ -9,10 +9,11 @@
 // Modes:
 //   stream - hand the rows over as a source and let the writer pull them
 //   load   - build every row in memory first, the load-everything path
-//   region - fill a template's named region, which moves the rows below it. Only
-//            we have this, so it has no counterpart in the other libraries. It is
-//            here because it is the one write path that holds its rows, and the
-//            claim that writing is flat has to be honest about where it is not.
+//   region      - fill a template's named region from an array, which moves the
+//                 rows below it. Only we have this, so it has no counterpart in the
+//                 other libraries.
+//   region-lazy - the same from a source whose length is not known up front, which
+//                 is the one write path that has to hold every row it is given.
 import { createWriteStream, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -68,6 +69,15 @@ const runners = {
     async region(count, path) {
       const { Workbook } = await importDefault("../dist/index.js");
       const editor = (await Workbook.open(await regionTemplate())).edit();
+      // An array says how many rows it has, so nothing has to be held to find out.
+      editor.worksheet(0).writeRegion("Data", [...rows(count)]);
+      await editor.save().pipeTo(Writable.toWeb(createWriteStream(path)));
+    },
+    async "region-lazy"(count, path) {
+      const { Workbook } = await importDefault("../dist/index.js");
+      const editor = (await Workbook.open(await regionTemplate())).edit();
+      // A source that only says how many rows it had once it is finished, so every
+      // row is held while the count is worked out.
       editor.worksheet(0).writeRegion("Data", rows(count));
       await editor.save().pipeTo(Writable.toWeb(createWriteStream(path)));
     },
