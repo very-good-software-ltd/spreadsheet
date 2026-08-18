@@ -5,10 +5,13 @@ import { movedRow, type RowShift, shiftFormula } from "./shift-formula";
 const Element = {
   Row: "row",
   Cell: "c",
-  Formula: "f",
   Break: "brk",
   Extensions: "extLst",
 } as const;
+
+// Every element whose text is a formula. A cell's is `f`, a conditional format's
+// rule is `formula`, and a data validation has one or two of its own.
+const FORMULA_ELEMENTS: ReadonlySet<string> = new Set(["f", "formula", "formula1", "formula2"]);
 
 const Attribute = {
   Reference: "r",
@@ -60,7 +63,7 @@ export async function* shiftSheetRows(
       }
 
       if (event.type === "close") {
-        inFormula = inFormula && event.name !== Element.Formula;
+        inFormula = inFormula && !FORMULA_ELEMENTS.has(event.name);
         moved.push(event);
         continue;
       }
@@ -79,7 +82,7 @@ export async function* shiftSheetRows(
         continue;
       }
 
-      inFormula = inFormula || event.name === Element.Formula;
+      inFormula = inFormula || FORMULA_ELEMENTS.has(event.name);
       moved.push(shiftedEvent(event, shift));
     }
 
@@ -127,4 +130,39 @@ function movedCell(reference: string, shift: RowShift): string {
 
 function withAttribute(event: XmlEvent, name: string, value: string): XmlEvent {
   return event.type === "open" ? { ...event, attributes: { ...event.attributes, [name]: value } } : event;
+}
+
+/**
+ * The events of a worksheet the move did not happen on, with only its formulas
+ * rewritten.
+ *
+ * Its own rows did not move, so its row numbers, its own references and its own
+ * ranges are all left exactly as they are. What can be stale is a formula naming
+ * the sheet that did move, and only a qualified reference can name it.
+ */
+export async function* shiftForeignFormulas(
+  events: AsyncIterable<readonly XmlEvent[]>,
+  shift: RowShift,
+  onSheet: string,
+): AsyncIterable<readonly XmlEvent[]> {
+  let inFormula = false;
+
+  for await (const batch of events) {
+    const moved: XmlEvent[] = [];
+
+    for (const event of batch) {
+      if (event.type === "open") {
+        inFormula = inFormula || FORMULA_ELEMENTS.has(event.name);
+      } else if (event.type === "close") {
+        inFormula = inFormula && !FORMULA_ELEMENTS.has(event.name);
+      } else if (inFormula) {
+        moved.push({ ...event, text: shiftFormula(event.text, shift, onSheet) });
+        continue;
+      }
+
+      moved.push(event);
+    }
+
+    yield moved;
+  }
 }

@@ -15,7 +15,8 @@ import type { TableOnSheet } from "./read-tables";
 import type { WorkbookInfo } from "./read-workbook";
 import { shiftFor } from "./region-shift";
 import { type NamedThings, resolveRegion } from "./resolve-region";
-import { shiftSheetRows } from "./shift-sheet";
+import type { RowShift } from "./shift-formula";
+import { shiftForeignFormulas, shiftSheetRows } from "./shift-sheet";
 import {
   type AddedWorksheet,
   asPart,
@@ -23,6 +24,7 @@ import {
   withAddedContentTypes,
   withAddedRelationships,
   withAddedSheets,
+  withMovedDefinedNames,
   withoutContentTypeOverride,
   withoutRelationshipTo,
   withRecalculationOnLoad,
@@ -55,6 +57,13 @@ const MAX_WORKSHEET_NAME_LENGTH = 31;
 // to, so none of these can appear in one.
 const FORBIDDEN_IN_WORKSHEET_NAME = /[:\\/?*[\]]/;
 
+interface PreparedRegion {
+  readonly sheet: string;
+  readonly name: string;
+  readonly shift: RowShift | undefined;
+  readonly block: RowBlock;
+}
+
 interface RegionEdit {
   readonly region: NamedRegion;
   readonly rows: RowSource;
@@ -80,6 +89,11 @@ export class XlsxEditor implements Editor {
   private readonly edits = new Map<number, SheetEdits>();
   private readonly added: AddedWorksheet[] = [];
   private readonly growing = new Map<string, { lastRow: number }>();
+
+  // Every region is read before any part is written, so that each worksheet can be
+  // given its own move and every other worksheet's as well. A formula can name any
+  // sheet, so no order of writing would let one region learn about a later one.
+  private prepared: Promise<readonly PreparedRegion[]> | undefined;
   private readonly takenRelationshipIds: Set<string>;
   private readonly xml: XmlReader = createXmlReader();
   private nextSheetId: number;
@@ -181,6 +195,7 @@ export class XlsxEditor implements Editor {
     for (const entry of this.archive.entries()) {
       if (
         entry.path === STYLES_PART ||
+        entry.path === WORKBOOK_PART ||
         sheets.has(entry.path) ||
         entry.path === CALCULATION_CHAIN_PART ||
         this.growing.has(entry.path)
@@ -198,6 +213,16 @@ export class XlsxEditor implements Editor {
 
     for (const [path, content] of sheets) {
       writer.add(path, encoded(content));
+    }
+
+    // The workbook part is declared after the sheets because its defined names have
+    // to move with the rows, and how far they moved is only known once the sheet
+    // holding the region has been written.
+    if (this.archive.has(WORKBOOK_PART)) {
+      const workbook = rewritten.get(WORKBOOK_PART);
+      if (workbook !== undefined) {
+        writer.add(WORKBOOK_PART, encoded(workbook));
+      }
     }
 
     // A grown table's part is declared after the sheets for the same reason the
@@ -230,7 +255,7 @@ export class XlsxEditor implements Editor {
     const rewritten = new Map<string, () => AsyncIterable<string>>();
 
     rewritten.set(WORKBOOK_PART, () =>
-      asPart(withAddedSheets(withRecalculationOnLoad(part(WORKBOOK_PART)), this.added)),
+      asPart(withAddedSheets(withRecalculationOnLoad(this.workbookNames(part(WORKBOOK_PART))), this.added)),
     );
 
     if (!droppingChain && this.added.length === 0) {
@@ -255,10 +280,14 @@ export class XlsxEditor implements Editor {
   private sheetParts(dateStyles: DateStyleTable): Map<string, () => AsyncIterable<string>> {
     const parts = new Map<string, () => AsyncIterable<string>>();
 
+    // A region moves rows, and any worksheet's formulas can name them, so once one
+    // is written every worksheet is rebuilt rather than copied.
+    const moving = [...this.edits.values()].some((edits) => edits.regions.length > 0);
+
     for (const [index, target] of this.targets.entries()) {
       const edits = this.edits.get(index);
 
-      if (!target.added && (edits === undefined || !hasEdits(edits))) {
+      if (!target.added && !moving && (edits === undefined || !hasEdits(edits))) {
         continue;
       }
 
@@ -276,38 +305,29 @@ export class XlsxEditor implements Editor {
     edits: SheetEdits | undefined,
     dateStyles: DateStyleTable,
   ): AsyncIterable<string> {
-    const source = (): AsyncIterable<readonly XmlEvent[]> =>
-      target.added ? emptyWorksheet() : this.xml.read(this.archive.openStream(target.path));
-
-    const region = firstRegion(edits, target.name);
+    const regions = await this.regions();
+    const own = regions.find((prepared) => prepared.sheet === target.name);
     const blocks = [...(edits?.blocks ?? [])];
-    let events = source();
 
-    if (region !== undefined) {
-      const rows = await collect(regionRows(region.region, region.rows));
-      const shift = shiftFor(region.region, rows.length);
+    let events: AsyncIterable<readonly XmlEvent[]> = target.added
+      ? emptyWorksheet()
+      : this.xml.read(this.archive.openStream(target.path));
 
-      blocks.push({
-        startRow: region.region.firstRow,
-        rows,
-        inheritFrom: region.region.firstRow,
-        inheritIsOptional: true,
-        order: region.order,
-      });
+    if (own !== undefined) {
+      blocks.push(own.block);
 
-      if (shift !== undefined) {
-        const blockers = await blockersFor(this.archive, this.xml, target.path, target.name, shift);
-        if (blockers.length > 0) {
-          throw new Error(
-            `Cannot write into "${region.region.name}": it moves the rows of worksheet "${target.name}" from row ${shift.at}, and that sheet has ${blockers.join(", and ")}`,
-          );
-        }
+      if (own.shift !== undefined) {
+        await this.refuseIfBlocked(target, own);
+        events = shiftSheetRows(events, own.shift);
+      }
+    }
 
-        events = shiftSheetRows(events, shift);
-        const growth = region.table === undefined ? undefined : this.growing.get(region.table.path);
-        if (growth !== undefined && region.table !== undefined) {
-          growth.lastRow = region.table.lastRow + shift.by;
-        }
+    // Its own move rewrites what it says about itself. Every other move rewrites
+    // what it says about the sheet that moved, and only a qualified reference can
+    // say anything about one.
+    for (const other of regions) {
+      if (other !== own && other.shift !== undefined) {
+        events = shiftForeignFormulas(events, other.shift, target.name);
       }
     }
 
@@ -320,6 +340,75 @@ export class XlsxEditor implements Editor {
       },
       { dateStyles, date1904: this.workbook.date1904 },
     );
+  }
+
+  private async refuseIfBlocked(target: Target, prepared: PreparedRegion): Promise<void> {
+    if (prepared.shift === undefined) {
+      return;
+    }
+
+    const blockers = await blockersFor(this.archive, this.xml, target.path, target.name, prepared.shift);
+    if (blockers.length > 0) {
+      throw new Error(
+        `Cannot write into "${prepared.name}": it moves the rows of worksheet "${target.name}" from row ${prepared.shift.at}, and that sheet has ${blockers.join(", and ")}`,
+      );
+    }
+  }
+
+  private regions(): Promise<readonly PreparedRegion[]> {
+    this.prepared ??= this.prepareRegions();
+
+    return this.prepared;
+  }
+
+  private async prepareRegions(): Promise<readonly PreparedRegion[]> {
+    const prepared: PreparedRegion[] = [];
+
+    for (const [index, edits] of this.edits) {
+      const region = firstRegion(edits, this.targets[index]?.name ?? "");
+      if (region === undefined) {
+        continue;
+      }
+
+      const rows = await collect(regionRows(region.region, region.rows));
+      const shift = shiftFor(region.region, rows.length);
+
+      if (shift !== undefined && region.table !== undefined) {
+        const growth = this.growing.get(region.table.path);
+        if (growth !== undefined) {
+          growth.lastRow = region.table.lastRow + shift.by;
+        }
+      }
+
+      prepared.push({
+        sheet: region.region.sheet,
+        name: region.region.name,
+        shift,
+        block: {
+          startRow: region.region.firstRow,
+          rows,
+          inheritFrom: region.region.firstRow,
+          inheritIsOptional: true,
+          order: region.order,
+        },
+      });
+    }
+
+    return prepared;
+  }
+
+  // Every name the moves touch, moved with them, so a name still covers what its
+  // author drew around and the written file can be filled again.
+  private async *workbookNames(events: AsyncIterable<XmlEvent>): AsyncIterable<XmlEvent> {
+    let moved = events;
+
+    for (const region of await this.regions()) {
+      if (region.shift !== undefined) {
+        moved = withMovedDefinedNames(moved, region.shift);
+      }
+    }
+
+    yield* moved;
   }
 
   private editorFor(index: number): WorksheetEditor {

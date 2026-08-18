@@ -1,5 +1,6 @@
 import { writeXmlEvent, XML_DECLARATION } from "../xml/write-xml";
 import type { XmlEvent, XmlOpen } from "../xml/xml-reader";
+import { type RowShift, shiftFormula } from "./shift-formula";
 
 const Element = {
   Workbook: "workbook",
@@ -236,6 +237,35 @@ async function* withoutElements(
 
     if (event.type === "open" && matches(event)) {
       skipping = 1;
+      continue;
+    }
+
+    yield event;
+  }
+}
+
+const DEFINED_NAME = "definedName";
+
+/**
+ * The workbook part with every defined name pointing at the moved rows moved with
+ * them, so a name still covers what its author drew around.
+ *
+ * A defined name always says which sheet it means, so an unqualified reference in
+ * one is not ours to interpret and is left alone.
+ */
+export async function* withMovedDefinedNames(
+  events: AsyncIterable<XmlEvent>,
+  shift: RowShift,
+): AsyncIterable<XmlEvent> {
+  let inName = false;
+
+  for await (const event of events) {
+    if (event.type === "open") {
+      inName = event.name === DEFINED_NAME;
+    } else if (event.type === "close") {
+      inName = false;
+    } else if (inName) {
+      yield { ...event, text: shiftFormula(event.text, shift, "") };
       continue;
     }
 

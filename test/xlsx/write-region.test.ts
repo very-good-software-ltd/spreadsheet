@@ -157,6 +157,26 @@ describe("writing into a named region", () => {
     expect((await cellsOf(await bytesOf(again.save())))[3]).toEqual(["left", 4, 5, 6, "right"]);
   });
 
+  it("moves the region's own name, so the output can be filled again with the same result", async () => {
+    const workbook = await Workbook.open(template());
+    const editor = workbook.edit();
+    editor.worksheet("Report").writeRegion("Data", [
+      [1, 1, 1],
+      [2, 2, 2],
+      [3, 3, 3],
+      [4, 4, 4],
+      [5, 5, 5],
+    ]);
+
+    const filled = await Workbook.open(await bytesOf(editor.save()));
+    const again = filled.edit();
+    again.worksheet("Report").writeRegion("Data", [[9, 9, 9]]);
+
+    const rows = await cellsOf(await bytesOf(again.save()));
+    expect(rows[3]).toEqual(["left", 9, 9, 9, "right"]);
+    expect(rows[4]).toEqual(["total", "under"]);
+  });
+
   it("refuses an unknown name at the call, not at save", async () => {
     const workbook = await Workbook.open(template());
 
