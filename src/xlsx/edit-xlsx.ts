@@ -9,6 +9,7 @@ import { createZipWriter } from "../zip/create-zip-writer";
 import type { ZipArchive } from "../zip/zip-archive";
 import { MAIN_NAMESPACE } from "./blank-workbook";
 import { type CellEdit, mergeRowEdits, type RowBlock } from "./merge-row-edits";
+import { blockersFor } from "./movement-blockers";
 import type { Styles } from "./read-styles";
 import type { TableOnSheet } from "./read-tables";
 import type { WorkbookInfo } from "./read-workbook";
@@ -295,6 +296,13 @@ export class XlsxEditor implements Editor {
       });
 
       if (shift !== undefined) {
+        const blockers = await blockersFor(this.archive, this.xml, target.path, target.name, shift);
+        if (blockers.length > 0) {
+          throw new Error(
+            `Cannot write into "${region.region.name}": it moves the rows of worksheet "${target.name}" from row ${shift.at}, and that sheet has ${blockers.join(", and ")}`,
+          );
+        }
+
         events = shiftSheetRows(events, shift);
         const growth = region.table === undefined ? undefined : this.growing.get(region.table.path);
         if (growth !== undefined && region.table !== undefined) {
