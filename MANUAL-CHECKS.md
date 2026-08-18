@@ -42,7 +42,7 @@ That writes two files into `manual-check/`:
 
 - `template.xlsx`, a made-up corporate template with a merged heading, column
   widths, frozen panes, conditional formatting, a pre-formatted data region, a
-  total formula and a calculation chain.
+  named region on its `Summary` sheet, a total formula and a calculation chain.
 - `filled.xlsx`, that template after this library filled it in.
 
 Open `filled.xlsx` in Excel. It has a **Checks** sheet listing every cell to look
@@ -71,9 +71,17 @@ script again. It uses your file instead of generating one. Then check:
 - [ ] Defined names still resolve.
 - [ ] Any macros still run.
 
-The script writes into `Report` by name and into rows 9 onward, so a template
-whose first sheet is called something else needs those two lines in
-`scripts/manual-check.mjs` adjusted to match.
+The script writes into `Report` by name and into rows 9 onward, and into a region
+named `Movements` on a sheet called `Summary`, so a template built differently
+needs those lines in `scripts/manual-check.mjs` adjusted to match. If your
+template names a region of its own, point the `writeRegion` call at that name
+instead, since a region the author drew in Excel is closer to the real case than
+one we generated.
+
+The script keeps whatever is already at `manual-check/template.xlsx` and only
+generates one when nothing is there. So after a change to the generated template,
+delete both files in `manual-check/` before running it, or you will be filling
+yesterday's file.
 
 
 ## Why each check is there
@@ -118,6 +126,26 @@ single streaming pass cannot know the final extent by the time it would have to
 be written. It is optional in the schema, so we leave it out. If scrolling to the
 end of a written sheet behaves oddly, or Excel's used-range shortcuts land in the
 wrong place, that is where to look.
+
+
+## Why the named region is checked twice
+
+The `Summary` sheet checks the two halves of what a named region promises.
+
+That it went in at all covers the write finding its place from the name rather
+than from a row number, which is the whole reason the feature exists.
+
+That rows 4 and 5 come back empty covers the harder half. Those cells held 999
+in the template, formatted exactly like the row we did fill. If clearing failed,
+the sheet would look completely normal and the totals underneath would be wrong,
+which is the failure this library exists to avoid rather than cause. The labels
+in column A and the text in column E are there to prove the clearing stopped at
+the region's edges instead of taking the whole row.
+
+Name Manager still listing `Movements` matters because `xl/workbook.xml` is one
+of the few parts we rewrite rather than copy. A name lost in that rewrite would
+not show up in the filled file at all, and the next run against it would fail to
+find the region. A test covers that too, by filling the output a second time.
 
 
 ## Whether a name's case matters

@@ -48,7 +48,28 @@ const EXPECTATIONS = [
   ["Report row 8", "Still frozen when you scroll", "Frozen panes survived"],
   ["Report!B9:B12", "Red where the quantity is over 10", "Conditional formatting survived"],
   ["Notes!A1", "Left untouched", "A sheet we never opened is byte-identical"],
-  ["Sheet tabs", "Report, Notes, Checks", "A worksheet was added, with its relationship and content type"],
+  ["Sheet tabs", "Report, Notes, Summary, Checks", "A worksheet was added, with its relationship and content type"],
+  [
+    "Summary row 3",
+    "January, 120, 45, 165, and still bordered",
+    "A region addressed by the name its author gave it was written, not by row number",
+  ],
+  [
+    "Summary rows 4 and 5",
+    "Empty of numbers, borders and shading unchanged",
+    "Rows of the region we were not given were cleared, so last run's figures cannot pass as this run's",
+  ],
+  [
+    "Summary!A4 and A5",
+    "Still say February and March",
+    "Clearing stopped at the region's edge and left the labels beside it alone",
+  ],
+  ["Summary!E3", "Still says 'keep me'", "Clearing stopped at the region's right edge too"],
+  [
+    "Formulas, Name Manager",
+    "Still lists Movements over Summary!$B$3:$D$5",
+    "The workbook part is rewritten rather than copied, and the names came through it intact",
+  ],
 ];
 
 async function buildTemplate() {
@@ -116,6 +137,28 @@ async function buildTemplate() {
     ],
   });
 
+  // A region the author named, filled with figures from a previous run. The fill
+  // writes one row into it, so the other two have to come back empty rather than
+  // still showing these.
+  const summary = workbook.addWorksheet("Summary");
+  summary.getCell("A1").value = "Movements by month";
+  summary.getCell("A1").font = { bold: true };
+  for (const [row, month] of [
+    [3, "January"],
+    [4, "February"],
+    [5, "March"],
+  ]) {
+    summary.getCell(`A${row}`).value = month;
+    summary.getCell(`E${row}`).value = "keep me";
+    for (const column of ["B", "C", "D"]) {
+      const cell = summary.getCell(`${column}${row}`);
+      cell.value = 999;
+      cell.border = BORDERED;
+      cell.numFmt = "#,##0";
+    }
+  }
+  workbook.definedNames.add("Summary!B3:D5", "Movements");
+
   const notes = workbook.addWorksheet("Notes");
   notes.getCell("A1").value = "This sheet is never opened by the fill, so every byte of it should survive.";
 
@@ -169,6 +212,10 @@ async function fill(source) {
     ],
     { inheritFrom: 9 },
   );
+
+  // One row into a region three rows deep, so the other two are cleared and the
+  // labels either side of it are left alone.
+  editor.worksheet("Summary").writeRegion("Movements", [[120, 45, 165]]);
 
   const checks = editor.addWorksheet("Checks");
   checks.appendRows(EXPECTATIONS);

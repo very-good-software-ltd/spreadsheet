@@ -126,6 +126,21 @@ describe("writing into a named region", () => {
     expect((await cellsOf(await bytesOf(editor.save())))[3]).toEqual(["left", 1, 2, 3, "right"]);
   });
 
+  // The workbook part is one of the few we rewrite rather than copy, so the names
+  // in it have to come through that rewrite intact or a second fill of the same
+  // file would not find them.
+  it("keeps the name in the written file, so the output can be filled again", async () => {
+    const workbook = await Workbook.open(template());
+    const editor = workbook.edit();
+    editor.worksheet("Report").writeRegion("Data", [[1, 2, 3]]);
+
+    const filled = await Workbook.open(await bytesOf(editor.save()));
+    const again = filled.edit();
+    again.worksheet("Report").writeRegion("Data", [[4, 5, 6]]);
+
+    expect((await cellsOf(await bytesOf(again.save())))[3]).toEqual(["left", 4, 5, 6, "right"]);
+  });
+
   it("refuses an unknown name at the call, not at save", async () => {
     const workbook = await Workbook.open(template());
 
