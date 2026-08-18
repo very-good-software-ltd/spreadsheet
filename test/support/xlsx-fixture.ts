@@ -12,10 +12,24 @@ type CellInput =
   | { readonly isoDate: string }
   | { readonly rawType: string };
 
+export interface TableInput {
+  readonly name: string;
+
+  /** The whole extent, header and totals rows included, as `"A1:C10"`. */
+  readonly ref: string;
+
+  /** Written as `displayName` when it differs from `name`, as Excel's own do not. */
+  readonly displayName?: string;
+  readonly headerRowCount?: number;
+  readonly totalsRowCount?: number;
+  readonly columns?: readonly string[];
+}
+
 export interface SheetInput {
   readonly name: string;
   readonly rows: readonly (readonly CellInput[])[];
   readonly hidden?: boolean;
+  readonly tables?: readonly TableInput[];
 }
 
 export interface DefinedNameInput {
@@ -80,6 +94,7 @@ export function xlsx(sheets: readonly SheetInput[], options: WorkbookOptions = {
   };
 
   const files: Record<string, Uint8Array> = {};
+  let tableNumber = 1;
 
   sheets.forEach((sheet, sheetIndex) => {
     const rowsXml = sheet.rows
@@ -90,6 +105,11 @@ export function xlsx(sheets: readonly SheetInput[], options: WorkbookOptions = {
         return `<row r="${rowIndex + 1}">${cellsXml}</row>`;
       })
       .join("");
+
+    if (sheet.tables !== undefined && sheet.tables.length > 0) {
+      addTables(files, sheet.tables, sheetIndex, tableNumber);
+      tableNumber += sheet.tables.length;
+    }
 
     files[`xl/worksheets/sheet${sheetIndex + 1}.xml`] = strToU8(
       `<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${rowsXml}</sheetData></worksheet>`,
@@ -151,3 +171,36 @@ function columnLetter(index: number): string {
   } while (n >= 0);
   return letters;
 }
+
+// A table is its own part, reached from the sheet by a relationship whose target
+// climbs out of the worksheets folder, which is how Excel writes it.
+function addTables(
+  files: Record<string, Uint8Array>,
+  tables: readonly TableInput[],
+  sheetIndex: number,
+  firstNumber: number,
+): void {
+  const relationships = tables
+    .map(
+      (_, i) =>
+        `<Relationship Id="rId${i + 1}" Type="${TABLE_RELATIONSHIP}" Target="../tables/table${firstNumber + i}.xml"/>`,
+    )
+    .join("");
+  files[`xl/worksheets/_rels/sheet${sheetIndex + 1}.xml.rels`] = strToU8(
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relationships}</Relationships>`,
+  );
+
+  tables.forEach((table, i) => {
+    const columns = table.columns ?? ["Column1"];
+    const columnElements = columns.map((name, index) => `<tableColumn id="${index + 1}" name="${name}"/>`).join("");
+    const header = table.headerRowCount === undefined ? "" : ` headerRowCount="${table.headerRowCount}"`;
+    const totals = table.totalsRowCount === undefined ? "" : ` totalsRowCount="${table.totalsRowCount}"`;
+    const display = table.displayName === undefined ? "" : ` displayName="${table.displayName}"`;
+
+    files[`xl/tables/table${firstNumber + i}.xml`] = strToU8(
+      `<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="${firstNumber + i}" name="${table.name}"${display} ref="${table.ref}"${header}${totals}><autoFilter ref="${table.ref}"/><tableColumns count="${columns.length}">${columnElements}</tableColumns></table>`,
+    );
+  });
+}
+
+const TABLE_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table";
