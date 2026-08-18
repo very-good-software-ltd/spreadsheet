@@ -18,7 +18,14 @@ export interface NamedThings {
   readonly tables: readonly TableOnSheet[];
 }
 
-export function resolveRegion(named: NamedThings, name: string, worksheet?: string): NamedRegion {
+export interface ResolvedRegion {
+  readonly region: NamedRegion;
+
+  /** The table the name belonged to, absent when it was a defined name. */
+  readonly table?: TableOnSheet;
+}
+
+export function resolveRegion(named: NamedThings, name: string, worksheet?: string): ResolvedRegion {
   const { definedNames, tables } = named;
   const found =
     (worksheet === undefined ? undefined : find(definedNames, name, worksheet)) ?? find(definedNames, name, undefined);
@@ -29,7 +36,7 @@ export function resolveRegion(named: NamedThings, name: string, worksheet?: stri
     // decide anything in a file it wrote.
     const table = tables.find((candidate) => sameName(candidate.name, name));
     if (table !== undefined) {
-      return dataRegionOf(table, worksheet);
+      return { region: dataRegionOf(table, worksheet), table };
     }
 
     throw new Error(
@@ -49,7 +56,7 @@ export function resolveRegion(named: NamedThings, name: string, worksheet?: stri
 
   const { sheet, firstRow, lastRow, firstColumnIndex, lastColumnIndex } = found.target;
 
-  return { name: found.name, sheet, firstRow, lastRow, firstColumnIndex, lastColumnIndex };
+  return { region: { name: found.name, sheet, firstRow, lastRow, firstColumnIndex, lastColumnIndex } };
 }
 
 // A table's extent covers its header row and its totals row, and neither is a

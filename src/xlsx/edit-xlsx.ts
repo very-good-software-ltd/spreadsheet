@@ -1,7 +1,7 @@
 import type { CellInput } from "../cell-input";
 import { columnIndexOf, rowNumberOf } from "../cell-reference";
 import type { Editor, RowSource, WorksheetEditor, WriteRowsOptions } from "../editor";
-import { regionRows } from "../region-rows";
+import { type RegionWrite, regionRows } from "../region-rows";
 import { createXmlReader } from "../xml/create-xml-reader";
 import type { XmlEvent, XmlReader } from "../xml/xml-reader";
 import { createZipWriter } from "../zip/create-zip-writer";
@@ -25,6 +25,7 @@ import {
 } from "./write-package";
 import { writeSheetPart } from "./write-sheet";
 import { DateStyleTable, writeStylesPart } from "./write-styles";
+import { withTableExtent } from "./write-table";
 
 const STYLES_PART = "xl/styles.xml";
 const WORKBOOK_PART = "xl/workbook.xml";
@@ -66,6 +67,7 @@ export class XlsxEditor implements Editor {
   private readonly targets: Target[];
   private readonly edits = new Map<number, SheetEdits>();
   private readonly added: AddedWorksheet[] = [];
+  private readonly growing = new Map<string, { lastRow: number }>();
   private readonly takenRelationshipIds: Set<string>;
   private readonly xml: XmlReader = createXmlReader();
   private nextSheetId: number;
@@ -95,7 +97,7 @@ export class XlsxEditor implements Editor {
   }
 
   writeRegion(name: string, rows: RowSource): this {
-    const region = resolveRegion(this.named, name);
+    const { region, table } = resolveRegion(this.named, name);
     const index = this.targets.findIndex((sheet) => sheet.name === region.sheet);
 
     if (index < 0) {
@@ -104,9 +106,35 @@ export class XlsxEditor implements Editor {
       );
     }
 
-    this.editorFor(index).writeRows(region.firstRow, regionRows(region, rows));
+    this.editorFor(index).writeRows(region.firstRow, regionRows(region, rows, this.extentOf(table, region.name)));
 
     return this;
+  }
+
+  // A table with no totals row can take more rows than it holds, and its part is
+  // rewritten at save with however far it reached. One with a totals row cannot,
+  // because that row sits under the data and would have to move down.
+  extentOf(table: TableOnSheet | undefined, name: string): RegionWrite {
+    if (table === undefined) {
+      return {};
+    }
+
+    if (table.totalsRowCount > 0) {
+      const held = table.lastRow - table.totalsRowCount - table.firstRow - table.headerRowCount + 1;
+      return {
+        whenFull: `The table "${name}" holds ${held} rows and was given more. It has a totals row underneath, which would have to move down, and nothing here is ever moved`,
+      };
+    }
+
+    const existing = this.growing.get(table.path);
+    if (existing !== undefined) {
+      return { growth: existing };
+    }
+
+    const growth = { lastRow: table.lastRow };
+    this.growing.set(table.path, growth);
+
+    return { growth };
   }
 
   addWorksheet(name: string): WorksheetEditor {
@@ -141,7 +169,12 @@ export class XlsxEditor implements Editor {
     const sheets = this.sheetParts(dateStyles);
 
     for (const entry of this.archive.entries()) {
-      if (entry.path === STYLES_PART || sheets.has(entry.path) || entry.path === CALCULATION_CHAIN_PART) {
+      if (
+        entry.path === STYLES_PART ||
+        sheets.has(entry.path) ||
+        entry.path === CALCULATION_CHAIN_PART ||
+        this.growing.has(entry.path)
+      ) {
         continue;
       }
 
@@ -155,6 +188,16 @@ export class XlsxEditor implements Editor {
 
     for (const [path, content] of sheets) {
       writer.add(path, encoded(content));
+    }
+
+    // A grown table's part is declared after the sheets for the same reason the
+    // styles part is: how far the table reached is only known once the rows that
+    // filled it have gone past.
+    for (const [path, growth] of this.growing) {
+      writer.add(
+        path,
+        encoded(() => asPart(withTableExtent(part(path), growth.lastRow))),
+      );
     }
 
     // The styles part is declared last on purpose. A date only learns which cell
@@ -229,10 +272,16 @@ export class XlsxEditor implements Editor {
     const edits = this.edits.get(index) ?? { cells: [], blocks: [], appended: [] };
     this.edits.set(index, edits);
 
-    return new XlsxWorksheetEditor(edits, this.named, this.targets[index]?.name ?? "", () => {
-      this.calls += 1;
-      return this.calls;
-    });
+    return new XlsxWorksheetEditor(
+      edits,
+      this.named,
+      this.targets[index]?.name ?? "",
+      (table, name) => this.extentOf(table, name),
+      () => {
+        this.calls += 1;
+        return this.calls;
+      },
+    );
   }
 
   private get named(): NamedThings {
@@ -278,6 +327,7 @@ class XlsxWorksheetEditor implements WorksheetEditor {
     private readonly edits: SheetEdits,
     private readonly named: NamedThings,
     private readonly sheetName: string,
+    private readonly extentOf: (table: TableOnSheet | undefined, name: string) => RegionWrite,
     private readonly nextOrder: () => number,
   ) {}
 
@@ -325,9 +375,9 @@ class XlsxWorksheetEditor implements WorksheetEditor {
   }
 
   writeRegion(name: string, rows: RowSource): this {
-    const region = resolveRegion(this.named, name, this.sheetName);
+    const { region, table } = resolveRegion(this.named, name, this.sheetName);
 
-    return this.writeRows(region.firstRow, regionRows(region, rows));
+    return this.writeRows(region.firstRow, regionRows(region, rows, this.extentOf(table, region.name)));
   }
 }
 

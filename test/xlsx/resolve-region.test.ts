@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TableOnSheet } from "../../src/xlsx/read-tables";
 import type { DefinedNameRef } from "../../src/xlsx/read-workbook";
-import { resolveRegion } from "../../src/xlsx/resolve-region";
+import { type NamedThings, resolveRegion } from "../../src/xlsx/resolve-region";
 
 function named(name: string, target: string, scope?: string): DefinedNameRef {
   const [sheet, area] = target.split("!");
@@ -25,9 +25,11 @@ function named(name: string, target: string, scope?: string): DefinedNameRef {
 
 const DATA = named("Data", "Sheet1!$B$4:$D$20");
 
+const regionOf = (named: NamedThings, name: string, worksheet?: string) => resolveRegion(named, name, worksheet).region;
+
 describe("resolveRegion", () => {
   it("finds a workbook-wide name and keeps where it points", () => {
-    expect(resolveRegion({ definedNames: [DATA], tables: [] }, "Data")).toEqual({
+    expect(regionOf({ definedNames: [DATA], tables: [] }, "Data")).toEqual({
       name: "Data",
       sheet: "Sheet1",
       firstRow: 4,
@@ -38,13 +40,13 @@ describe("resolveRegion", () => {
   });
 
   it("finds a workbook-wide name from a worksheet that has none of its own", () => {
-    expect(resolveRegion({ definedNames: [DATA], tables: [] }, "Data", "Sheet1")).toMatchObject({ firstRow: 4 });
+    expect(regionOf({ definedNames: [DATA], tables: [] }, "Data", "Sheet1")).toMatchObject({ firstRow: 4 });
   });
 
   it("prefers a worksheet's own name over the workbook-wide one of the same spelling", () => {
     const names = [DATA, named("Data", "Sheet1!$A$1:$A$2", "Sheet1")];
 
-    expect(resolveRegion({ definedNames: names, tables: [] }, "Data", "Sheet1")).toMatchObject({
+    expect(regionOf({ definedNames: names, tables: [] }, "Data", "Sheet1")).toMatchObject({
       firstRow: 1,
       lastRow: 2,
     });
@@ -66,7 +68,7 @@ describe("resolveRegion", () => {
 
   // Excel's Name Manager will not define two names differing only in case.
   it("matches a name whatever case it is asked for in", () => {
-    expect(resolveRegion({ definedNames: [DATA], tables: [] }, "DATA")).toMatchObject({ name: "Data" });
+    expect(regionOf({ definedNames: [DATA], tables: [] }, "DATA")).toMatchObject({ name: "Data" });
   });
 
   it("says what the name is when it points at nothing writable", () => {
@@ -112,7 +114,7 @@ describe("resolveRegion over tables", () => {
   it("gives a table's data rows, not its header or its totals row", () => {
     const tables = [table("Sales", "Sheet1", "B2:D9", { totalsRowCount: 1 })];
 
-    expect(resolveRegion({ definedNames: [], tables }, "Sales")).toEqual({
+    expect(regionOf({ definedNames: [], tables }, "Sales")).toEqual({
       name: "Sales",
       sheet: "Sheet1",
       firstRow: 3,
@@ -125,13 +127,13 @@ describe("resolveRegion over tables", () => {
   it("starts at the first row when the table declares no header", () => {
     const tables = [table("Sales", "Sheet1", "B2:D9", { headerRowCount: 0 })];
 
-    expect(resolveRegion({ definedNames: [], tables }, "Sales")).toMatchObject({ firstRow: 2, lastRow: 9 });
+    expect(regionOf({ definedNames: [], tables }, "Sales")).toMatchObject({ firstRow: 2, lastRow: 9 });
   });
 
   it("finds a table from the worksheet it is on", () => {
     const tables = [table("Sales", "Sheet1", "B2:D9")];
 
-    expect(resolveRegion({ definedNames: [], tables }, "Sales", "Sheet1")).toMatchObject({ firstRow: 3 });
+    expect(regionOf({ definedNames: [], tables }, "Sales", "Sheet1")).toMatchObject({ firstRow: 3 });
   });
 
   it("refuses a table on a different worksheet than the one asking", () => {

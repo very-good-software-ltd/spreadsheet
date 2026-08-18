@@ -221,12 +221,15 @@ This is the same reason `formula()` is a constructor.
 The order of anchors is deliberate.
 Named regions come first, because the author placed them on purpose, the format keeps them correct, and they cost one more element in `xl/workbook.xml`, a part we already stream at open.
 Excel Tables come second, and what growing a table means splits in two.
-Widening a table's extent to cover appended rows is the small half, one more part to read and two attributes to rewrite, its `ref` and the autofilter range. That lifts the limitation recorded below, that a table does not grow to cover appended rows.
+Widening a table's extent to cover the rows it is given is the small half, one more part to read and two attributes to rewrite, its `ref` and its autofilter range. That is built, and it lifts the limitation recorded below that a table does not grow to cover appended rows.
 A total that survives any number of rows then comes free, as long as it is a structured reference like `=SUM(Sales[Amount])` or a whole column `=SUM(B:B)`, since neither names a row number.
 That holds only while the total sits above the data or beside it.
 A total underneath the rows, whether it is the table's own totals row or a plain cell below it, has to move down as the data grows, and moving content down is row insertion, which decision 11 refuses.
-So the first half is worth building and the second is the insertion problem again. They are not one piece of work.
-None of this has been checked against real Excel, and no fixture in the repo contains a table.
+So a table with a totals row is not grown, and says so rather than writing through it. The two halves are not one piece of work.
+
+A table grows and never shrinks. Fewer rows than it holds clears the rest, exactly as a named region does, rather than pulling the extent back in. Shrinking would need to know what Excel accepts as a table's smallest extent, which we have not established, and clearing already prevents the failure that matters.
+
+A table's writable region is the rows between its header and its totals row, since neither is a place for a caller's data. Its extent covers both.
 Matching a header row by its text does not happen.
 It is a guess wearing an anchor's clothes, and a guess that silently picks the wrong row is the failure class we turned down `insertRow` over.
 
@@ -314,7 +317,8 @@ The shadowing is visible in the API rather than a rule to remember.
   That last one took two passes. The first template had no calculation chain, because `exceljs` writes none even for a workbook with formulas, so the code that removes one never ran. `scripts/manual-check.mjs` now splices one in so the branch is reachable.
   Desktop Excel is the stricter of the two and agrees. So the design decisions that only Excel could settle are settled, and what remains is coverage rather than doubt: the generated template has no charts or pivot tables, so a real one is still worth a pass. `npm run manual-check` builds the file to try it with.
 - **What a written file does not update.**
-  An Excel Table in the template does not grow to cover appended rows, and a chart pointing at a fixed range does not extend.
+  A chart pointing at a fixed range does not extend to cover rows that were written.
+  An Excel Table written by name does now grow, unless it has a totals row. One filled by row number through `writeRows` or `appendRows` still does not, because nothing in that call says the rows belong to it.
   A digitally signed workbook has its signature invalidated by any modification, which is inherent and not fixable.
   A template whose data region sits above a totals block is not served: writing past the region overwrites the totals, and we cannot detect it because we do not know those rows are a totals block.
   Decision 14 answers this for a template whose data region carries a name, since the name is the author telling us where the region ends. It stays true for one addressed only by coordinates.
@@ -326,6 +330,10 @@ The shadowing is visible in the API rather than a rule to remember.
   The writer parses defined names anyway, so exposing the resolved names and their extents to a reader is a small surface for free parsing.
   The case that would earn it is an input workbook, a filled-in form whose values live in named cells, where the name survives an author moving the cell and a coordinate does not.
   Not a priority. A region read is a different shape from the row stream the read API is, and nobody has asked for either.
+
+- **A grown table's `sortState`.**
+  A table part can hold a `sortState` recording the last sort applied to it, with its own `ref` over the data. We rewrite the table's extent and its autofilter range when it grows, and leave `sortState` as it was.
+  Whether a stale one matters is unknown. It records what was done rather than describing the table, so the likely answer is that Excel ignores it until someone sorts again, but that is reasoning rather than evidence, and growing it wrongly would be worse than leaving it. `exceljs` writes none, so no fixture here has one to look at.
 
 - **Writing `.ods`.**
   Deferred, and not decided against. Writing only one of the two formats we read is a real asymmetry and we are not calling it the end state.

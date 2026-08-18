@@ -9,12 +9,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- Address an Excel Table by its name, the same way as a named region.
+  `writeRegion("Sales", rows)` writes the rows between the table's header and its totals row, since neither is a place for your data.
+  A table grows to fit more rows than it currently holds, extending its own range and its filter, so a total written as `=SUM(Sales[Amount])` keeps covering everything. It never shrinks: fewer rows clears the rest and leaves the table the size it was.
+  A table with a totals row is not grown, because that row sits under the data and would have to move down. It says so rather than writing through it.
 - Write into a region by the name its author gave it, with `worksheet.writeRegion("Lines", rows)`.
   Name a region in Excel and the template can move under your code without breaking it, which a cell reference cannot survive.
   A name is a contract about the area it covers. Rows you do not fill are cleared, keeping their formatting, so last month's numbers cannot sit under this month's heading looking current. More rows than it holds is an error rather than a write through whatever sits underneath, which answers the totals block problem for a template that names its data region.
   A worksheet sees the names it owns before the workbook-wide ones, matching Excel. `editor.writeRegion` sees only the workbook-wide ones and writes into whichever sheet the name points at.
   A name that cannot be written into says what it is, whether a formula, a print area, a whole column or a reference Excel broke when a sheet was deleted, rather than reporting that the name is missing.
-  Excel Tables are not addressable yet, and matching a header row by its text is not something we will do.
+  Matching a header row by its text is not something we will do.
 
 ## [0.2.0] - 2026-08-17
 

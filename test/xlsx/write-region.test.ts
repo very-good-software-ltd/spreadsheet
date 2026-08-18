@@ -1,3 +1,4 @@
+import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { Workbook } from "../../src/workbook";
 import { xlsx } from "../support/xlsx-fixture";
@@ -207,5 +208,86 @@ describe("writing into an Excel Table by name", () => {
     editor.writeRegion("Sales", [[1, 2, 3]]);
 
     expect((await cellsOf(await bytesOf(editor.save())))[2]).toEqual(["left", 1, 2, 3, "right"]);
+  });
+});
+
+function tableExtentsIn(bytes: Uint8Array): (string | undefined)[] {
+  const part = strFromU8(unzipSync(bytes)["xl/tables/table1.xml"] ?? new Uint8Array());
+  return [...part.matchAll(/<(table|autoFilter)\b[^>]*\bref="([^"]+)"/g)].map((match) => match[2]);
+}
+
+async function grown(rows: readonly (readonly number[])[], totalsRowCount = 0) {
+  const source = xlsx([
+    {
+      name: "Report",
+      rows: [[], ["", "Item", "Qty", "Amount"], ["", 9, 9, 9], ["", 9, 9, 9]],
+      tables: [{ name: "Sales", ref: totalsRowCount > 0 ? "B2:D5" : "B2:D4", headerRowCount: 1, totalsRowCount }],
+    },
+  ]);
+  const editor = (await Workbook.open(source)).edit();
+  editor.worksheet("Report").writeRegion("Sales", rows);
+
+  return bytesOf(editor.save());
+}
+
+describe("growing an Excel Table to fit the rows it is given", () => {
+  it("extends the table and its filter to cover the rows that did not fit", async () => {
+    expect(
+      tableExtentsIn(
+        await grown([
+          [1, 1, 1],
+          [2, 2, 2],
+          [3, 3, 3],
+          [4, 4, 4],
+        ]),
+      ),
+    ).toEqual(["B2:D6", "B2:D6"]);
+  });
+
+  it("puts those rows on the sheet past where the table used to end", async () => {
+    const rows = await cellsOf(
+      await grown([
+        [1, 1, 1],
+        [2, 2, 2],
+        [3, 3, 3],
+        [4, 4, 4],
+      ]),
+    );
+
+    expect(rows[4]).toEqual([undefined, 3, 3, 3]);
+    expect(rows[5]).toEqual([undefined, 4, 4, 4]);
+  });
+
+  it("leaves the table the size it was when given fewer rows, clearing the rest", async () => {
+    const bytes = await grown([[1, 1, 1]]);
+
+    expect(tableExtentsIn(bytes)).toEqual(["B2:D4", "B2:D4"]);
+    expect((await cellsOf(bytes))[3]).toEqual([""]);
+  });
+
+  it("leaves the table alone when the rows it was given fit", async () => {
+    expect(
+      tableExtentsIn(
+        await grown([
+          [1, 1, 1],
+          [2, 2, 2],
+        ]),
+      ),
+    ).toEqual(["B2:D4", "B2:D4"]);
+  });
+
+  // The totals row sits under the data, so making room for another row would mean
+  // moving it down, and nothing here is ever moved.
+  it("refuses to grow a table that has a totals row", async () => {
+    await expect(
+      grown(
+        [
+          [1, 1, 1],
+          [2, 2, 2],
+          [3, 3, 3],
+        ],
+        1,
+      ),
+    ).rejects.toThrow('The table "Sales" holds 2 rows and was given more. It has a totals row underneath');
   });
 });
