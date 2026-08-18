@@ -14,13 +14,13 @@ const BROKEN = "#REF!";
 
 // A sheet name is quoted when it holds a space or punctuation, and a quote inside
 // it is written twice.
-const SHEET = String.raw`(?:'(?:[^']|'')+'|[A-Za-z0-9_.À-￿]+)`;
+const SHEET = `(?:'(?:[^']|'')+'|[A-Za-z0-9_.À-￿]+)`;
 const CELL = String.raw`\$?[A-Z]{1,3}\$?[0-9]{1,7}`;
-const REFERENCE = new RegExp(String.raw`(${SHEET}!)?(${CELL})(?::(${CELL}))?`, "y");
+const REFERENCE = new RegExp(`(${SHEET}!)?(${CELL})(?::(${CELL}))?`, "y");
 
 // Two shapes we will not move. A reference spanning sheets carries rows for all of
 // them, and a whole row reference has no column to tell it apart from a number.
-const SHEET_RANGE = new RegExp(String.raw`${SHEET}:${SHEET}!`, "y");
+const SHEET_RANGE = new RegExp(`${SHEET}:${SHEET}!`, "y");
 const WHOLE_ROWS = /\$?[0-9]{1,7}:\$?[0-9]{1,7}/y;
 
 // A reference never runs on from a name, and is never the name of a function, so
