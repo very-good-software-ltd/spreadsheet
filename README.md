@@ -350,9 +350,16 @@ await editor.save().pipeTo(Writable.toWeb(createWriteStream("invoice.xlsx")));``
 
 <!-- /example -->
 
-A name is a contract about an area, not a place to start.
-Give it fewer rows than it covers and the rest are cleared, keeping their formatting, so last month's numbers cannot sit under this month's heading looking current.
-Give it more rows than it covers and you get an error rather than a write through whatever is underneath.
+The region ends up exactly as tall as the data you give it, and the sheet moves around it.
+More rows than it covers pushes everything below down. Fewer pulls everything below up.
+This is the model you already have from every other templating tool: content below the hole stays below the hole, however big the hole turns out to be.
+
+It is also the same operation you would do by hand in Excel with Insert and Delete, so it behaves the way you would expect it to.
+A total written `=SUM(C9:C11)` over a region of rows 9 to 11 becomes `=SUM(C9:C13)` when five rows arrive, and `=SUM(C9:C9)` when one does.
+Formulas on other sheets that read those rows move too, and so do merged ranges, conditional formats, data validations, hyperlinks, filters, page breaks, frozen panes, table extents and the region's own name.
+
+Give it no rows at all and you get one empty, correctly styled row.
+The region never shrinks past that, because a total written over it would have its whole range deleted and die.
 
 `worksheet.writeRegion` finds the names that worksheet owns, then the workbook-wide ones.
 `editor.writeRegion` finds only the workbook-wide ones, and writes into whichever sheet the name points at.
@@ -375,14 +382,9 @@ Growing is the part that earns it.
 A total written as `=SUM(Sales[Amount])` refers to the table by name rather than to a range of rows, so it keeps covering everything however many rows arrive.
 Write that same total as `=SUM(C9:C20)` and it will not.
 
-Two limits, both deliberate:
+A table with a totals row is fine. That row moves down with everything else.
 
-A table grows and never shrinks.
-Give it fewer rows than it holds and the rest are cleared, keeping their formatting, and the table stays the size it was.
-
-A table with a totals row does not grow at all, and says so.
-The totals row sits underneath the data, so making room would mean pushing it down, and nothing here is ever pushed down.
-If you want a table that grows, put the total above the table or beside it, and let it refer to the table by name.
+The table's own range and its filter's move with it, so Excel keeps treating the new rows as part of the table.
 
 ### Formatting is the template's job
 
@@ -496,18 +498,19 @@ Saving twice throws, because your row sources have already been read and the sec
 ## What it does not write
 
 - `.ods`. Only `.xlsx` can be written.
-- Inserting or deleting rows, and anything that shifts cells. Moving a row changes what every formula, merged range, conditional format and table range below it means, and getting that subtly wrong is worse than not offering it.
-- Deleting or renaming a sheet, for the same reason: both ripple into everything that refers to them.
+- Moving rows for `writeRows` or `appendRows`. Those write where you say and push nothing around. Rows move only for `writeRegion`, where the region says which rows are the data.
+- Deleting or renaming a sheet. Both ripple into everything that refers to them by name.
 - Growing a chart's range to cover rows you wrote.
-- Growing an Excel Table you filled by row number with `writeRows` or `appendRows`, since nothing in that call says the rows belong to it. Address the table by name and it grows.
-- Growing an Excel Table that has a totals row, whichever way you fill it. The totals row would have to move down.
+- Growing an Excel Table you filled by row number, since nothing in that call says the rows belong to it. Address the table by name and it grows.
+- Anything at all on a sheet whose rows are moving that we cannot move with them. Rather than leave it stale, `save` throws and names it. That means a chart or image anchored below the region, a cell comment below it, a pivot table reading from it, a formula spanning a range of sheets, a whole row reference, and a sheet carrying an extension list, which is where sparklines and the newer conditional formats live. A chart *above* the region is untouched and fine.
 - Keeping a digital signature valid. Any change to a file invalidates it.
 - Files past 4 GB, or with a single part past 4 GB. Those need Zip64, which we do not write, and we throw rather than produce a file no reader will open. This mirrors the read side, which throws on a Zip64 archive. Handling files that large is its own piece of work.
 
-One template shape is worth calling out.
-If the data region has a totals block underneath it, writing more rows than the region has room for overwrites that block.
-We cannot detect that from a row number, because nothing in the file says those rows are a totals block.
-Naming the region in Excel and using `writeRegion` does tell us, and then writing too many rows is an error instead.
+Two things worth knowing about `writeRegion`.
+
+Only one region per worksheet per save. Writing one moves the rows the others were aimed at.
+
+And the rows you give it are read in full before the file is written, because how far the sheet moves depends on how many there are. For a report region that is nothing. For a million rows it is a million rows, and `appendRows` is the streaming answer there, since nothing sits below appended rows and nothing has to move.
 
 
 ## Streaming and memory

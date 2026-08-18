@@ -39,7 +39,11 @@ Name Manager still lists `Movements` over its range, so the names in
 `xl/workbook.xml` survive the rewrite of that part. Every expectation on the
 Checks sheet now holds.
 
-Checked again on 2026-08-18, after tables landed. `Ledger!D1` reads 150, so
+The 2026-08-18 checks below were run before rows could move. Everything they
+settled still holds, but the Summary sheet now checks something different and is
+worth running again.
+
+Checked on 2026-08-18, after tables landed. `Ledger!D1` reads 150, so
 `SUM(Entries[Amount])` covered all five rows written into a table that had room
 for two. A structured reference resolves over the table's extent and nothing else,
 so that number is Excel agreeing the table grew, not just that the rows are on the
@@ -146,24 +150,29 @@ end of a written sheet behaves oddly, or Excel's used-range shortcuts land in th
 wrong place, that is where to look.
 
 
-## Why the named region is checked twice
+## Why the Summary sheet is the important one
 
-The `Summary` sheet checks the two halves of what a named region promises.
+It is the only check that covers rows actually moving, which is the largest thing
+the writer does and the one with the most ways to be silently wrong.
 
-That it went in at all covers the write finding its place from the name rather
-than from a row number, which is the whole reason the feature exists.
+The region covers rows 3 to 5 and is given one row, so two rows have to go. What
+to look at, in order of how badly it fails:
 
-That rows 4 and 5 come back empty covers the harder half. Those cells held 999
-in the template, formatted exactly like the row we did fill. If clearing failed,
-the sheet would look completely normal and the totals underneath would be wrong,
-which is the failure this library exists to avoid rather than cause. The labels
-in column A and the text in column E are there to prove the clearing stopped at
-the region's edges instead of taking the whole row.
+`B5` should read 120 and its formula bar should show `SUM(B3:B3)`. In the template
+that formula is `SUM(B3:B5)` sitting at `B7`. So this one cell proves three things
+at once: the rows went, everything under them came up, and the formula was
+rewritten to match rather than left pointing at rows that no longer exist. A wrong
+number here is the failure, not a missing one.
 
-Name Manager still listing `Movements` matters because `xl/workbook.xml` is one
-of the few parts we rewrite rather than copy. A name lost in that rewrite would
-not show up in the filled file at all, and the next run against it would fail to
-find the region. A test covers that too, by filling the output a second time.
+February and March should be nowhere on the sheet. Excel deletes a whole row, so
+labels beside the region go with it. That is the deliberate cost of whole-row
+moves and it is worth seeing rather than reading about.
+
+Name Manager should still list `Movements`, now over `Summary!$B$3:$D$3` rather
+than `$B$3:$D$5`. If the name did not shrink with the region, filling the output a
+second time would write into rows that are no longer the data. A test covers the
+same ground by filling twice, but only Excel can confirm it agrees the name is
+still well formed.
 
 
 ## Why the table has a total above it

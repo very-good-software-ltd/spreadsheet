@@ -7,12 +7,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- `writeRegion` now makes the region exactly as tall as the data you give it, moving the rest of the sheet.
+  More rows pushes everything below down, fewer pulls it up, which is how every other templating tool behaves and how Insert and Delete behave in Excel.
+  Previously more rows than the region held was an error, and fewer left blank rows behind.
+  Everything that pointed at the moved rows moves with them: formulas on that sheet and on every other sheet, merged ranges, conditional formats, data validations, hyperlinks, filters, page breaks, frozen panes, table extents and defined names. A total written `=SUM(C9:C11)` over a three-row region becomes `=SUM(C9:C13)` when five rows arrive.
+  No rows at all leaves one empty formatted row, since a region with nothing in it would take every reference to it down with it.
+  Where something on the sheet cannot be moved with the rows, `save` throws and names it rather than writing a file that is quietly wrong: a chart or image anchored below the region, a comment below it, a pivot table reading from it, a formula spanning a range of sheets or naming whole rows, or a sheet carrying an extension list. A chart above the region is fine.
+  Only one region per worksheet per save, and the rows given to a region are read in full before the file is written. `writeRows` and `appendRows` are unchanged, move nothing, and stay flat in memory.
+- An Excel Table with a totals row now grows. That row moves down with everything else, so the advice to put a total above a table is gone.
+
 ### Added
 
 - Address an Excel Table by its name, the same way as a named region.
   `writeRegion("Sales", rows)` writes the rows between the table's header and its totals row, since neither is a place for your data.
-  A table grows to fit more rows than it currently holds, extending its own range and its filter, so a total written as `=SUM(Sales[Amount])` keeps covering everything. It never shrinks: fewer rows clears the rest and leaves the table the size it was.
-  A table with a totals row is not grown, because that row sits under the data and would have to move down. It says so rather than writing through it.
+  The table grows or shrinks to fit, extending its own range and its filter, so a total written as `=SUM(Sales[Amount])` keeps covering everything.
 - Write into a region by the name its author gave it, with `worksheet.writeRegion("Lines", rows)`.
   Name a region in Excel and the template can move under your code without breaking it, which a cell reference cannot survive.
   A name is a contract about the area it covers. Rows you do not fill are cleared, keeping their formatting, so last month's numbers cannot sit under this month's heading looking current. More rows than it holds is an error rather than a write through whatever sits underneath, which answers the totals block problem for a template that names its data region.
