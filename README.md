@@ -362,6 +362,28 @@ An unknown name fails at the call.
 So does a name that cannot be written into, and the error says which kind it is, whether that is a formula, a print area, a whole column or a reference Excel broke when someone deleted a sheet.
 Being told a name is a print area is more use than being told it is missing.
 
+### Tables, for when you do not know how many rows there are
+
+A named region has to fit.
+An Excel Table does not, and that is the reason to use one.
+
+Select your data in Excel and press Insert, Table.
+You get a named object with a header row, filter buttons and, if you want it, a totals row.
+Its name works with `writeRegion` exactly like a named region's, except that the rows go between the header and the totals row, and the table grows if you give it more rows than it currently holds.
+
+Growing is the part that earns it.
+A total written as `=SUM(Sales[Amount])` refers to the table by name rather than to a range of rows, so it keeps covering everything however many rows arrive.
+Write that same total as `=SUM(C9:C20)` and it will not.
+
+Two limits, both deliberate:
+
+A table grows and never shrinks.
+Give it fewer rows than it holds and the rest are cleared, keeping their formatting, and the table stays the size it was.
+
+A table with a totals row does not grow at all, and says so.
+The totals row sits underneath the data, so making room would mean pushing it down, and nothing here is ever pushed down.
+If you want a table that grows, put the total above the table or beside it, and let it refer to the table by name.
+
 ### Formatting is the template's job
 
 There is no API here for fonts, fills, borders, merges or column widths, and there is not going to be one.
@@ -476,7 +498,9 @@ Saving twice throws, because your row sources have already been read and the sec
 - `.ods`. Only `.xlsx` can be written.
 - Inserting or deleting rows, and anything that shifts cells. Moving a row changes what every formula, merged range, conditional format and table range below it means, and getting that subtly wrong is worse than not offering it.
 - Deleting or renaming a sheet, for the same reason: both ripple into everything that refers to them.
-- Growing an Excel Table or a chart range to cover rows you appended.
+- Growing a chart's range to cover rows you wrote.
+- Growing an Excel Table you filled by row number with `writeRows` or `appendRows`, since nothing in that call says the rows belong to it. Address the table by name and it grows.
+- Growing an Excel Table that has a totals row, whichever way you fill it. The totals row would have to move down.
 - Keeping a digital signature valid. Any change to a file invalidates it.
 - Files past 4 GB, or with a single part past 4 GB. Those need Zip64, which we do not write, and we throw rather than produce a file no reader will open. This mirrors the read side, which throws on a Zip64 archive. Handling files that large is its own piece of work.
 

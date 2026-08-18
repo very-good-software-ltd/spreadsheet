@@ -53,7 +53,8 @@ That writes two files into `manual-check/`:
 
 - `template.xlsx`, a made-up corporate template with a merged heading, column
   widths, frozen panes, conditional formatting, a pre-formatted data region, a
-  named region on its `Summary` sheet, a total formula and a calculation chain.
+  named region on its `Summary` sheet, an Excel Table on its `Ledger` sheet, a
+  total formula and a calculation chain.
 - `filled.xlsx`, that template after this library filled it in.
 
 Open `filled.xlsx` in Excel. It has a **Checks** sheet listing every cell to look
@@ -157,6 +158,28 @@ Name Manager still listing `Movements` matters because `xl/workbook.xml` is one
 of the few parts we rewrite rather than copy. A name lost in that rewrite would
 not show up in the filled file at all, and the next run against it would fail to
 find the region. A test covers that too, by filling the output a second time.
+
+
+## Why the table has a total above it
+
+The `Ledger` sheet has a table with room for two rows, and the fill writes five,
+so the table has to grow by three.
+
+`D1` holds `SUM(Entries[Amount])`, above the table rather than below it, and that
+cell is the point of the whole check. A structured reference names the table
+instead of a range of rows, so if the table really grew, the total covers all five
+entries and reads 150. If the extent did not move, Excel treats the extra rows as
+ordinary cells outside the table and the total reads 60, which is the first two
+rows we overwrote plus nothing else. A wrong number here is the failure, not a
+missing one.
+
+The total is above the table on purpose. Put it underneath and the table cannot
+grow at all, because that row would have to move down, which is the thing we do
+not do.
+
+Clicking inside the last row and looking for Table Design on the ribbon is the
+same question asked a different way. Rows can look banded and filtered while
+sitting outside the table, and only Excel can tell you which it is.
 
 
 ## Whether a name's case matters

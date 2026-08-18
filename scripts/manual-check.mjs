@@ -48,7 +48,11 @@ const EXPECTATIONS = [
   ["Report row 8", "Still frozen when you scroll", "Frozen panes survived"],
   ["Report!B9:B12", "Red where the quantity is over 10", "Conditional formatting survived"],
   ["Notes!A1", "Left untouched", "A sheet we never opened is byte-identical"],
-  ["Sheet tabs", "Report, Notes, Summary, Checks", "A worksheet was added, with its relationship and content type"],
+  [
+    "Sheet tabs",
+    "Report, Notes, Summary, Ledger, Checks",
+    "A worksheet was added, with its relationship and content type",
+  ],
   [
     "Summary row 3",
     "January, 120, 45, 165, and still bordered",
@@ -69,6 +73,21 @@ const EXPECTATIONS = [
     "Formulas, Name Manager",
     "Still lists Movements over Summary!$B$3:$D$5",
     "The workbook part is rewritten rather than copied, and the names came through it intact",
+  ],
+  [
+    "Ledger rows 3 to 7",
+    "Five entries, all banded and filtered like the table",
+    "A table with room for two grew to take five, and Excel still treats the new rows as part of it",
+  ],
+  [
+    "Ledger!D1",
+    "150",
+    "SUM(Entries[Amount]) followed the table as it grew, which a formula written over a range could not",
+  ],
+  [
+    "Click inside Ledger row 7",
+    "The ribbon shows Table Design",
+    "The last row we added really is inside the table, not just formatted like it",
   ],
 ];
 
@@ -159,6 +178,25 @@ async function buildTemplate() {
   }
   workbook.definedNames.add("Summary!B3:D5", "Movements");
 
+  // A table with room for two rows and a total above it that refers to the table by
+  // name rather than by range. The fill writes five rows, so the table has to grow
+  // and the total has to follow it without being touched.
+  const ledger = workbook.addWorksheet("Ledger");
+  ledger.getCell("B1").value = "Total";
+  ledger.getCell("B1").font = { bold: true };
+  ledger.getCell("D1").value = { formula: "SUM(Entries[Amount])", result: 0 };
+  ledger.getCell("D1").font = { bold: true };
+  ledger.addTable({
+    name: "Entries",
+    ref: "B2",
+    headerRow: true,
+    columns: [{ name: "Entry" }, { name: "Qty" }, { name: "Amount" }],
+    rows: [
+      ["old one", 1, 999],
+      ["old two", 2, 999],
+    ],
+  });
+
   const notes = workbook.addWorksheet("Notes");
   notes.getCell("A1").value = "This sheet is never opened by the fill, so every byte of it should survive.";
 
@@ -216,6 +254,15 @@ async function fill(source) {
   // One row into a region three rows deep, so the other two are cleared and the
   // labels either side of it are left alone.
   editor.worksheet("Summary").writeRegion("Movements", [[120, 45, 165]]);
+
+  // Five rows into a table with room for two, so it has to grow by three.
+  editor.worksheet("Ledger").writeRegion("Entries", [
+    ["Discovery", 4, 10],
+    ["Build", 12, 20],
+    ["Review", 2, 30],
+    ["Handover", 1, 40],
+    ["Support", 3, 50],
+  ]);
 
   const checks = editor.addWorksheet("Checks");
   checks.appendRows(EXPECTATIONS);
