@@ -9,11 +9,13 @@
 // Modes:
 //   stream - hand the rows over as a source and let the writer pull them
 //   load   - build every row in memory first, the load-everything path
-//   region      - fill a template's named region from an array, which moves the
-//                 rows below it. Only we have this, so it has no counterpart in the
-//                 other libraries.
-//   region-lazy - the same from a source whose length is not known up front, which
-//                 is the one write path that has to hold every row it is given.
+//   region-stream - fill a template's named region, which moves the rows below it,
+//                   from a source whose length is not known up front
+//   region-load   - the same from an array
+//
+// So the modes are a grid: append rows or fill a region, from a source or from an
+// array. Only we have a region, so those two have no counterpart in the other
+// libraries.
 import { createWriteStream, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -66,19 +68,18 @@ const runners = {
       editor.worksheet(0).appendRows([...rows(count)]);
       await editor.save().pipeTo(Writable.toWeb(createWriteStream(path)));
     },
-    async region(count, path) {
+    async "region-stream"(count, path) {
       const { Workbook } = await importDefault("../dist/index.js");
       const editor = (await Workbook.open(await regionTemplate())).edit();
-      // An array says how many rows it has, so nothing has to be held to find out.
-      editor.worksheet(0).writeRegion("Data", [...rows(count)]);
+      editor.worksheet(0).writeRegion("Data", rows(count));
       await editor.save().pipeTo(Writable.toWeb(createWriteStream(path)));
     },
-    async "region-lazy"(count, path) {
+    async "region-load"(count, path) {
       const { Workbook } = await importDefault("../dist/index.js");
       const editor = (await Workbook.open(await regionTemplate())).edit();
-      // A source that only says how many rows it had once it is finished, so every
-      // row is held while the count is worked out.
-      editor.worksheet(0).writeRegion("Data", rows(count));
+      // Materialising the rows first is what the streaming mode avoids, the same
+      // split as the two above.
+      editor.worksheet(0).writeRegion("Data", [...rows(count)]);
       await editor.save().pipeTo(Writable.toWeb(createWriteStream(path)));
     },
   },

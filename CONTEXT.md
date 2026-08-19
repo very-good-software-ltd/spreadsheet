@@ -399,7 +399,7 @@ This supersedes the table growth rule from decision 14. A table with a totals ro
 - **What a region costs (resolved).**
   A million rows into a region finishes under a 150MB heap, the same as `appendRows`, where it once needed 500MB. Its rows are counted as they are written rather than beforehand, so nothing is held in proportion to the data.
   Getting there meant moving the row shifting from a transform ahead of the writer into the writer itself. Four attempts to shrink the holding instead had moved the time from 7.4s to 5.6s and the memory not at all, which was the sign that the holding was the design rather than an inefficiency.
-  The write benchmark has `region` and `region-lazy` modes, and `--cap` is the measure worth quoting, since peak RSS counts memory the runtime has not given back.
+  The write benchmark has `region-stream` and `region-load` modes, and `--cap` is the measure worth quoting, since peak RSS counts memory the runtime has not given back.
   Two shapes still count first, both recorded in decision 15: something above the region reading rows below it, and two regions whose sheets read each other.
 
 - **A grown table's `sortState`.**
