@@ -56,10 +56,12 @@ const writer = fileURLToPath(new URL("./write-file.mjs", import.meta.url));
 const DEFAULT_ROW_COUNT = 1_000_000;
 
 const args = process.argv.slice(2);
-const capArg = args.find((arg) => arg.startsWith("--cap="));
+// Last one wins, so a value passed on the command line overrides the one the npm
+// script already supplies.
+const capArg = args.findLast((arg) => arg.startsWith("--cap="));
 const cap = capArg ? Number(capArg.slice("--cap=".length)) : undefined;
 
-const writeArg = args.find((arg) => arg === "--write" || arg.startsWith("--write="));
+const writeArg = args.findLast((arg) => arg === "--write" || arg.startsWith("--write="));
 const readArg = args.some((arg) => arg === "--read");
 const explicit = args.filter((arg) => !arg.startsWith("--"));
 
