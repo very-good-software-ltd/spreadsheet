@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-08-19
+
 ### Changed
 
 - Filling a region no longer holds your rows. A million rows finishes under a 150MB heap, the same as `appendRows`, where it needed 500MB before. Nothing about the output changes.
@@ -83,7 +85,8 @@ A file past 4 GB, or with a single part past 4 GB, needs Zip64 and throws rather
 - List sheets with `workbook.worksheets`, including whether each one is hidden.
 - Ship TypeScript types and an ES module.
 
-[Unreleased]: https://github.com/christophgockel/very-good-spreadsheet/compare/0.3.0...HEAD
+[Unreleased]: https://github.com/christophgockel/very-good-spreadsheet/compare/0.3.1...HEAD
+[0.3.1]: https://github.com/christophgockel/very-good-spreadsheet/compare/0.3.0...0.3.1
 [0.3.0]: https://github.com/christophgockel/very-good-spreadsheet/compare/0.2.0...0.3.0
 [0.2.0]: https://github.com/christophgockel/very-good-spreadsheet/compare/0.1.0...0.2.0
 [0.1.0]: https://github.com/christophgockel/very-good-spreadsheet/releases/tag/0.1.0
