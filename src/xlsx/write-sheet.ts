@@ -84,13 +84,14 @@ export interface SheetWriteContext {
   readonly date1904: boolean;
 }
 
-interface SourceCell {
+export interface SourceCell {
   readonly columnIndex: number;
   readonly attributes: Readonly<Record<string, string>>;
   readonly inner: readonly XmlEvent[];
 }
 
-interface SourceRow {
+/** A row of the worksheet being rewritten, as it was read from the part. */
+export interface SourceRow {
   readonly number: number;
   readonly attributes: Readonly<Record<string, string>>;
   readonly cells: readonly SourceCell[];

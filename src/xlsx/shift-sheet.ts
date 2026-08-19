@@ -1,6 +1,7 @@
 import { cellReference, columnIndexOf } from "../cell-reference";
 import type { XmlEvent, XmlOpen } from "../xml/xml-reader";
 import { movedRow, type RowShift, shiftFormula } from "./shift-formula";
+import type { SourceRow } from "./write-sheet";
 
 const Element = {
   Row: "row",
@@ -165,4 +166,100 @@ export async function* shiftForeignFormulas(
 
     yield moved;
   }
+}
+
+/**
+ * Where `row` ends up once the rows have moved, or `undefined` when it was one of
+ * the rows taken out.
+ *
+ * Its cells move with it, and any formula in them is rewritten, since a formula in
+ * a row that moved refers to cells that moved too.
+ */
+export function movedSourceRow(row: SourceRow, shift: RowShift): SourceRow | undefined {
+  const number = movedRow(row.number, shift);
+  if (number === undefined) {
+    return undefined;
+  }
+
+  return {
+    number,
+    attributes: { ...row.attributes, [Attribute.Reference]: String(number) },
+    cells: row.cells.map((cell) => ({
+      columnIndex: cell.columnIndex,
+      attributes: movedAttributes(cell.attributes, cell.attributes[Attribute.Reference], shift),
+      inner: movedInner(cell.inner, shift),
+    })),
+  };
+}
+
+/** One event from outside the rows, with any reference on it moved. */
+export function movedSheetEvent(event: XmlEvent, shift: RowShift): XmlEvent {
+  if (event.type !== "open") {
+    return event;
+  }
+
+  if (event.name === Element.Extensions) {
+    throw new Error("This worksheet holds an extension list, whose contents cannot be moved with confidence");
+  }
+
+  return shiftedEvent(event, shift);
+}
+
+/**
+ * Whether anything here points at row `row` or below it.
+ *
+ * Asked of what sits above a region, because that goes out before the rows are
+ * counted and so before it can be known how far anything moves. Something up there
+ * pointing down means the count has to be worked out first.
+ */
+export function pointsAtOrBelow(events: readonly XmlEvent[], row: number): boolean {
+  return events.some((event) => eventPointsAtOrBelow(event, row));
+}
+
+function eventPointsAtOrBelow(event: XmlEvent, row: number): boolean {
+  const texts =
+    event.type === "open"
+      ? REFERENCE_ATTRIBUTES.map((name) => event.attributes[name]).filter((value) => value !== undefined)
+      : event.type === "text"
+        ? [event.text]
+        : [];
+
+  return texts.some((text) => mentionsRowAtOrBelow(text, row));
+}
+
+// A reference we cannot read is treated as pointing below, so an unfamiliar shape
+// makes the writer wait for the count rather than write something stale.
+function mentionsRowAtOrBelow(text: string, row: number): boolean {
+  for (const match of text.matchAll(/\$?[A-Z]{1,3}\$?([0-9]{1,7})/g)) {
+    if (Number(match[1]) >= row) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function movedAttributes(
+  attributes: Readonly<Record<string, string>>,
+  reference: string | undefined,
+  shift: RowShift,
+): Readonly<Record<string, string>> {
+  return reference === undefined ? attributes : { ...attributes, [Attribute.Reference]: movedCell(reference, shift) };
+}
+
+function movedInner(inner: readonly XmlEvent[], shift: RowShift): readonly XmlEvent[] {
+  let inFormula = false;
+
+  return inner.map((event) => {
+    if (event.type === "open") {
+      inFormula = inFormula || FORMULA_ELEMENTS.has(event.name);
+      return shiftedEvent(event, shift);
+    }
+    if (event.type === "close") {
+      inFormula = inFormula && !FORMULA_ELEMENTS.has(event.name);
+      return event;
+    }
+
+    return inFormula ? { ...event, text: shiftFormula(event.text, shift, shift.sheet) } : event;
+  });
 }
