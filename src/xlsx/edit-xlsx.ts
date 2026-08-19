@@ -2,7 +2,7 @@ import type { CellInput } from "../cell-input";
 import { columnIndexOf, rowNumberOf } from "../cell-reference";
 import type { Editor, RowSource, WorksheetEditor, WriteRowsOptions } from "../editor";
 import type { NamedRegion } from "../named-region";
-import { readRegionRows } from "../region-rows";
+import { placeEach, readRegionRows } from "../region-rows";
 import { createXmlReader } from "../xml/create-xml-reader";
 import type { XmlEvent, XmlReader } from "../xml/xml-reader";
 import { createZipWriter } from "../zip/create-zip-writer";
@@ -17,7 +17,7 @@ import { shiftFor } from "./region-shift";
 import { type NamedThings, resolveRegion } from "./resolve-region";
 import { shiftDrawingAnchors } from "./shift-drawing";
 import type { RowShift } from "./shift-formula";
-import { shiftForeignFormulas, shiftSheetRows } from "./shift-sheet";
+import { shiftForeignFormulas } from "./shift-sheet";
 import {
   type AddedWorksheet,
   asPart,
@@ -30,7 +30,7 @@ import {
   withoutRelationshipTo,
   withRecalculationOnLoad,
 } from "./write-package";
-import { writeSheetPart } from "./write-sheet";
+import { type RegionWrite, writeSheetPart } from "./write-sheet";
 import { DateStyleTable, writeStylesPart } from "./write-styles";
 import { withTableExtent } from "./write-table";
 
@@ -60,9 +60,12 @@ const FORBIDDEN_IN_WORKSHEET_NAME = /[:\\/?*[\]]/;
 
 interface PreparedRegion {
   readonly sheet: string;
-  readonly name: string;
-  readonly shift: RowShift | undefined;
-  readonly block: RowBlock;
+  readonly region: NamedRegion;
+  readonly rows: AsyncIterable<readonly (CellInput | undefined)[]>;
+
+  /** Settled once the worksheet holding it has been written and its rows counted. */
+  readonly shift: Promise<RowShift | undefined>;
+  readonly moved: (shift: RowShift | undefined) => void;
 }
 
 interface RegionEdit {
@@ -320,39 +323,52 @@ export class XlsxEditor implements Editor {
   ): AsyncIterable<string> {
     const regions = await this.regions();
     const own = regions.find((prepared) => prepared.sheet === target.name);
-    const blocks = [...(edits?.blocks ?? [])];
 
     let events: AsyncIterable<readonly XmlEvent[]> = target.added
       ? emptyWorksheet()
       : this.xml.read(this.archive.openStream(target.path));
 
     if (own !== undefined) {
-      blocks.push(own.block);
-
-      if (own.shift !== undefined) {
-        await this.refuseIfBlocked(target, own);
-        events = shiftSheetRows(events, own.shift);
-      }
+      await this.refuseIfBlocked(target, own);
     }
 
-    // Its own move rewrites what it says about itself. Every other move rewrites
-    // what it says about the sheet that moved, and only a qualified reference can
-    // say anything about one.
+    // Its own move is applied as the sheet is written, because only the writer
+    // knows how far it goes. Every other move is already settled by then, and only
+    // a qualified reference can name the sheet it happened on.
     for (const other of regions) {
-      if (other !== own && other.shift !== undefined) {
-        events = shiftForeignFormulas(events, other.shift, target.name);
+      if (other !== own) {
+        const shift = await other.shift;
+        if (shift !== undefined) {
+          events = shiftForeignFormulas(events, shift, target.name);
+        }
       }
     }
 
     yield* writeSheetPart(
       events,
       {
-        positioned: mergeRowEdits(edits?.cells ?? [], blocks),
+        positioned: mergeRowEdits(edits?.cells ?? [], edits?.blocks ?? []),
         appended: appendedRows(edits?.appended ?? []),
-        inheritedRows: inheritedRows(blocks),
+        inheritedRows: inheritedRows(edits?.blocks ?? []),
+        ...(own === undefined ? {} : { region: this.regionWrite(own, edits) }),
       },
       { dateStyles, date1904: this.workbook.date1904 },
     );
+  }
+
+  private regionWrite(prepared: PreparedRegion, edits: SheetEdits | undefined): RegionWrite {
+    const table = edits?.regions[0]?.table;
+
+    return {
+      firstRow: prepared.region.firstRow,
+      lastRow: prepared.region.lastRow,
+      rows: prepared.rows,
+      moveFor: (count) => shiftFor(prepared.region, count),
+      moved: (shift) => {
+        this.growTable(table, shift);
+        prepared.moved(shift);
+      },
+    };
   }
 
   // Which drawing parts belong to a worksheet a region is being written into. That a
@@ -376,21 +392,26 @@ export class XlsxEditor implements Editor {
   }
 
   private async *drawingPart(path: string, sheet: string): AsyncIterable<string> {
-    const shift = (await this.regions()).find((region) => region.sheet === sheet)?.shift;
+    const shift = await (await this.regions()).find((region) => region.sheet === sheet)?.shift;
     const events = this.xml.read(this.archive.openStream(path));
 
     yield* asPart(flatten(shift === undefined ? events : shiftDrawingAnchors(events, shift)));
   }
 
+  // Asked before the rows are counted, so the row the move starts at is not known
+  // yet. The region's own first row is the earliest it can be, which refuses a
+  // little more than it has to rather than a little less.
   private async refuseIfBlocked(target: Target, prepared: PreparedRegion): Promise<void> {
-    if (prepared.shift === undefined) {
-      return;
-    }
+    const at = prepared.region.firstRow;
+    const blockers = await blockersFor(this.archive, this.xml, target.path, target.name, {
+      sheet: prepared.sheet,
+      at,
+      by: 0,
+    });
 
-    const blockers = await blockersFor(this.archive, this.xml, target.path, target.name, prepared.shift);
     if (blockers.length > 0) {
       throw new Error(
-        `Cannot write into "${prepared.name}": it moves the rows of worksheet "${target.name}" from row ${prepared.shift.at}, and that sheet has ${blockers.join(", and ")}`,
+        `Cannot write into "${prepared.region.name}": it moves the rows of worksheet "${target.name}" from row ${at}, and that sheet has ${blockers.join(", and ")}`,
       );
     }
   }
@@ -402,39 +423,57 @@ export class XlsxEditor implements Editor {
   }
 
   private async prepareRegions(): Promise<readonly PreparedRegion[]> {
+    const written = [...this.edits].flatMap(([index, edits]) => {
+      const region = firstRegion(edits, this.targets[index]?.name ?? "");
+      return region === undefined ? [] : [region];
+    });
+
     const prepared: PreparedRegion[] = [];
 
-    for (const [index, edits] of this.edits) {
-      const region = firstRegion(edits, this.targets[index]?.name ?? "");
-      if (region === undefined) {
+    for (const edit of written) {
+      const settled = settlement<RowShift | undefined>();
+
+      // With one region its rows are counted as they are written, so nothing is
+      // held. With more than one, a formula on either sheet can name the other, and
+      // no order of writing lets both learn about the other first, so both are
+      // counted up front instead.
+      if (written.length === 1) {
+        prepared.push({
+          sheet: edit.region.sheet,
+          region: edit.region,
+          rows: placeEach(edit.region, edit.rows),
+          shift: settled.value,
+          moved: settled.settle,
+        });
         continue;
       }
 
-      const rows = await readRegionRows(region.region, region.rows);
-      const shift = shiftFor(region.region, rows.count);
-
-      if (shift !== undefined && region.table !== undefined) {
-        const growth = this.growing.get(region.table.path);
-        if (growth !== undefined) {
-          growth.lastRow = region.table.lastRow + shift.by;
-        }
-      }
+      const rows = await readRegionRows(edit.region, edit.rows);
+      const shift = shiftFor(edit.region, rows.count);
+      settled.settle(shift);
+      this.growTable(edit.table, shift);
 
       prepared.push({
-        sheet: region.region.sheet,
-        name: region.region.name,
-        shift,
-        block: {
-          startRow: region.region.firstRow,
-          rows: rows.rows(),
-          inheritFrom: region.region.firstRow,
-          inheritIsOptional: true,
-          order: region.order,
-        },
+        sheet: edit.region.sheet,
+        region: edit.region,
+        rows: rows.rows(),
+        shift: settled.value,
+        moved: settled.settle,
       });
     }
 
     return prepared;
+  }
+
+  private growTable(table: TableOnSheet | undefined, shift: RowShift | undefined): void {
+    if (table === undefined || shift === undefined) {
+      return;
+    }
+
+    const growth = this.growing.get(table.path);
+    if (growth !== undefined) {
+      growth.lastRow = table.lastRow + shift.by;
+    }
   }
 
   // Every name the moves touch, moved with them, so a name still covers what its
@@ -443,8 +482,9 @@ export class XlsxEditor implements Editor {
     let moved = events;
 
     for (const region of await this.regions()) {
-      if (region.shift !== undefined) {
-        moved = withMovedDefinedNames(moved, region.shift);
+      const shift = await region.shift;
+      if (shift !== undefined) {
+        moved = withMovedDefinedNames(moved, shift);
       }
     }
 
@@ -640,4 +680,16 @@ async function* appendedRows(sources: readonly RowSource[]): AsyncIterable<Reado
       yield cells;
     }
   }
+}
+
+// A value that is not known when it is asked for, only when the work that produces
+// it is done. Used for how far a sheet's rows moved, which its own writer settles
+// and every other part of the file waits on.
+function settlement<T>(): { value: Promise<T>; settle: (value: T) => void } {
+  let settle: ((value: T) => void) | undefined;
+  const value = new Promise<T>((resolve) => {
+    settle = resolve;
+  });
+
+  return { value, settle: (settled) => settle?.(settled) };
 }

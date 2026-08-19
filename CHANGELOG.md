@@ -9,8 +9,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- Filling a region is faster and holds less. A million rows went from 7.4s to 5.6s, and a lazy source now needs about a 400MB heap where it needed more than 500MB. Nothing about the output changes.
-  Rows from a source whose length is not known up front are held as one flat run of values rather than as an array each, and an array source is not drained at all, since it already says how long it is.
+- Filling a region no longer holds your rows. A million rows finishes under a 150MB heap, the same as `appendRows`, where it needed 500MB before. Nothing about the output changes.
+  The rows are counted as they are written rather than beforehand. One shape still counts first: a sheet with something above the region that reads rows below it, since that has to go out before the count is known.
 
 ### Added
 

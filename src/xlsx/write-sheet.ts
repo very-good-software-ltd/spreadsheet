@@ -3,6 +3,8 @@ import { cellReference, columnIndexOf } from "../cell-reference";
 import { writeXmlEvent, XML_DECLARATION } from "../xml/write-xml";
 import type { XmlEvent } from "../xml/xml-reader";
 import { dateToSerial } from "./date";
+import type { RowShift } from "./shift-formula";
+import { movedSheetEvent, movedSourceRow, pointsAtOrBelow } from "./shift-sheet";
 
 const Element = {
   SheetData: "sheetData",
@@ -55,6 +57,21 @@ export interface RowEdit {
   readonly inheritIsOptional?: boolean;
 }
 
+export interface RegionWrite {
+  /** The rows the region covers in the sheet as it stands. */
+  readonly firstRow: number;
+  readonly lastRow: number;
+
+  /** Read once, as the region is written, and never held. */
+  readonly rows: AsyncIterable<readonly (CellInput | undefined)[]>;
+
+  /** How far the sheet has to move for the region to hold `count` rows. */
+  moveFor(count: number): RowShift | undefined;
+
+  /** Told how far the sheet moved, once its rows have been counted. */
+  moved(shift: RowShift | undefined): void;
+}
+
 export interface SheetWritePlan {
   /** Row edits at known row numbers, in ascending order. */
   readonly positioned: AsyncIterable<RowEdit>;
@@ -68,6 +85,15 @@ export interface SheetWritePlan {
    * be worked out from the edits alone because they are read lazily.
    */
   readonly inheritedRows: ReadonlySet<number>;
+
+  /**
+   * A region to fill, whose rows decide how far the rest of the sheet moves.
+   *
+   * The rows are read as they are written, so nothing is held, unless something
+   * above the region points below it. That has to go out before the rows have been
+   * counted, so when it exists the rows are counted first.
+   */
+  readonly region?: RegionWrite;
 }
 
 /** Supplies a style index whose number format renders a date. */
@@ -100,6 +126,7 @@ export interface SourceRow {
 type SheetPiece =
   | { readonly kind: "prologue"; readonly event: XmlEvent }
   | { readonly kind: "row"; readonly row: SourceRow }
+  | { readonly kind: "regionRow"; readonly edit: RowEdit; readonly source: SourceRow | undefined }
   | { readonly kind: "epilogue"; readonly event: XmlEvent };
 
 /**
@@ -139,9 +166,23 @@ export async function* writeSheetPart(
     return writeRow(edit, source, inherited, context);
   };
 
-  for await (const piece of parseSheet(events)) {
+  for await (const piece of withRegion(parseSheet(events), plan)) {
     if (piece.kind === "prologue") {
       yield writeXmlEvent(piece.event);
+      continue;
+    }
+
+    if (piece.kind === "regionRow") {
+      for (const edit of await positioned.takeWhile((next) => next.number < piece.edit.number)) {
+        yield write(edit, undefined);
+      }
+
+      if (piece.source !== undefined && plan.inheritedRows.has(piece.source.number)) {
+        inheritable.set(piece.source.number, piece.source);
+      }
+
+      yield write(piece.edit, piece.source);
+      lastRowNumber = Math.max(lastRowNumber, piece.edit.number);
       continue;
     }
 
@@ -491,4 +532,162 @@ function peekable<T>(source: AsyncIterable<T>): Peekable<T> {
       }
     },
   };
+}
+
+// Fills the plan's region as the sheet goes past it, and moves everything after it
+// by however many rows turned up.
+//
+// The rows above the region are written before the ones inside it, so they go out
+// before the count is known. When none of them points below the region that is
+// fine and nothing is held. When one does, the rows are counted first, which is
+// the only case where a region costs memory in proportion to its data.
+async function* withRegion(pieces: AsyncIterable<SheetPiece>, plan: SheetWritePlan): AsyncIterable<SheetPiece> {
+  const region = plan.region;
+  if (region === undefined) {
+    yield* pieces;
+    return;
+  }
+
+  const source = pieces[Symbol.asyncIterator]();
+  const above: SheetPiece[] = [];
+  let overshot: SheetPiece | undefined;
+
+  for (;;) {
+    const next = await source.next();
+    if (next.done === true) {
+      break;
+    }
+    if (next.value.kind === "row" && next.value.row.number >= region.firstRow) {
+      overshot = next.value;
+      break;
+    }
+    above.push(next.value);
+  }
+
+  const held = pointsAtOrBelow(above.flatMap(eventsOf), region.firstRow) ? await drain(region.rows) : undefined;
+  let shift = held === undefined ? undefined : region.moveFor(held.length);
+
+  if (shift !== undefined) {
+    region.moved(shift);
+  }
+  for (const piece of above) {
+    const moved = shift === undefined ? piece : movedPiece(piece, shift);
+    if (moved !== undefined) {
+      yield moved;
+    }
+  }
+
+  // The rows the region already covers, which the written ones take their cells and
+  // formatting from. There are as many as the author drew, so holding them is not
+  // holding the sheet.
+  const covered = new Map<number, SourceRow>();
+  while (overshot?.kind === "row" && overshot.row.number <= region.lastRow) {
+    covered.set(overshot.row.number, overshot.row);
+    const next = await source.next();
+    overshot = next.done === true ? undefined : next.value;
+  }
+
+  const height = region.lastRow - region.firstRow + 1;
+  const rows = peekable(held === undefined ? region.rows : oneByOne(held));
+  let index = 0;
+
+  for (;;) {
+    const values = await rows.peek();
+    if (values === undefined) {
+      break;
+    }
+
+    // Read before the next row is asked for. A region hands the same row out again
+    // and again with new values in it, so looking ahead overwrites what is here.
+    const cells = cellsOf(values);
+    await rows.drop();
+
+    const last = (await rows.peek()) === undefined;
+    const from = last ? Math.min(height - 1, index) : index < height - 1 ? index : undefined;
+
+    yield {
+      kind: "regionRow",
+      edit: {
+        number: region.firstRow + index,
+        cells,
+        inheritFrom: region.firstRow,
+        inheritIsOptional: true,
+      },
+      source: from === undefined ? undefined : covered.get(region.firstRow + from),
+    };
+    index += 1;
+  }
+
+  if (shift === undefined) {
+    shift = region.moveFor(index);
+    region.moved(shift);
+  }
+
+  if (overshot !== undefined) {
+    const moved = shift === undefined ? overshot : movedPiece(overshot, shift);
+    if (moved !== undefined) {
+      yield moved;
+    }
+  }
+
+  for (;;) {
+    const next = await source.next();
+    if (next.done === true) {
+      return;
+    }
+
+    const moved = shift === undefined ? next.value : movedPiece(next.value, shift);
+    if (moved !== undefined) {
+      yield moved;
+    }
+  }
+}
+
+function movedPiece(piece: SheetPiece, shift: RowShift): SheetPiece | undefined {
+  if (piece.kind === "row") {
+    const row = movedSourceRow(piece.row, shift);
+    return row === undefined ? undefined : { kind: "row", row };
+  }
+  if (piece.kind === "regionRow") {
+    return piece;
+  }
+
+  return { kind: piece.kind, event: movedSheetEvent(piece.event, shift) };
+}
+
+function eventsOf(piece: SheetPiece): XmlEvent[] {
+  if (piece.kind === "row") {
+    return piece.row.cells.flatMap((cell) => [
+      { type: "open", name: Element.Cell, attributes: cell.attributes },
+      ...cell.inner,
+    ]);
+  }
+
+  return piece.kind === "regionRow" ? [] : [piece.event];
+}
+
+function cellsOf(values: readonly (CellInput | undefined)[]): RowCells {
+  const cells = new Map<number, CellInput>();
+
+  for (const [column, value] of values.entries()) {
+    if (value !== undefined) {
+      cells.set(column, value);
+    }
+  }
+
+  return cells;
+}
+
+async function drain<T>(source: AsyncIterable<T>): Promise<T[]> {
+  const held: T[] = [];
+
+  for await (const item of source) {
+    held.push(item);
+  }
+
+  return held;
+}
+
+async function* oneByOne<T>(items: readonly T[]): AsyncIterable<T> {
+  yield* items;
 }

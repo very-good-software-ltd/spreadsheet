@@ -282,9 +282,11 @@ A region shrinks to one row and no further. A range whose every endpoint is dele
 
 Excel is more forgiving here than we assumed. A range with one endpoint inside the deleted rows shrinks to what survives, rather than breaking, so `=SUM(C9:C13)` minus row 13 becomes `=SUM(C9:C12)`. Only a reference with nothing left to point at dies, which is a single cell in a deleted row or a range wholly inside them. Confirmed by hand in Excel on 2026-08-18.
 
-Every region is read in full before any part is written, and the moves are worked out from all of them together.
+A region's rows are counted as they are written, so nothing is held.
 
-This was expected to be narrower. The plan was to count rows as they went past, so that only a sheet with something above the region pointing below it would have to wait, found by scanning its formulas up to the region. Two things ruled that out. The move has to be applied to the event stream ahead of the writer, and the writer only draws on a row source as it reaches each row, so the count never arrives in time. And a formula on any sheet can name any other, so two regions whose totals read each other cannot be ordered such that both are known first. Reading them all up front answers both, and it costs the region's rows in memory, which is recorded in the open questions.
+That is only possible because the writer owns the move. The move used to be a transform sitting ahead of the writer, which meant it had to know how far the rows went before the writer had counted them, so every row was read first. Now the writer renumbers as it goes, because only it knows when the region has been filled.
+
+Two shapes still have to count first. Whatever sits above the region goes out before its rows are counted, so if anything up there reads rows below the region it cannot be written until the count is known. And two regions in one save, on sheets whose formulas read each other, cannot be ordered so that both learn about the other first. Both fall back to counting first, which is what every region used to do.
 
 This supersedes the table growth rule from decision 14. A table with a totals row was refused because that row would have to move. Now it moves, so a table grows whatever is under it, and the advice to put a total above a table goes with it.
 
@@ -366,14 +368,11 @@ This supersedes the table growth rule from decision 14. A table with a totals ro
   The case that would earn it is an input workbook, a filled-in form whose values live in named cells, where the name survives an author moving the cell and a coordinate does not.
   Not a priority. A region read is a different shape from the row stream the read API is, and nobody has asked for either.
 
-- **A region's rows are held while it is written.**
-  Writing into a region reads all of its rows before the sheet goes out, because how far the sheet moves depends on how many there are, and the rows above the region are written before the ones inside it. So a region given a million rows holds a million rows.
-  The write benchmark has `region` and `region-lazy` modes alongside `stream` and `load`, so the cost is a measured number rather than a warning. It is the one write path whose peak tracks the row count, which is why the README sends bulk exports to `appendRows`.
-  A million rows needs roughly a 500MB heap from an array and 400MB from a lazy source, against 300MB for the same rows through `appendRows`. Those come from running the benchmark under `--cap`, which is the honest measure: peak RSS includes memory the runtime has not returned, and a heap cap says what is actually held.
-  A lazy source costs less than an array, which is the wrong way round at first glance. Its rows are held as one flat run of values, where an array of a million rows is a million objects. We do not copy an array into that flat form, because a caller who keeps their own array would then pay for both. The benchmark's array is a temporary, so it shows the copy in its best light rather than its usual one.
-  Four attempts to close the remaining gap on `load` moved the time from 7.4s to 5.6s and the memory not at all: a flat layout for held rows, using an array's length instead of draining it, a single-source fast path through the row merge, and caching the inherited row's column index. Where the rest goes is still unknown, and guessing at it a fifth time is not the way to find out.
-  `writeRows` and `appendRows` are unaffected and stay flat, and they are the answer for bulk, where nothing sits below the rows being written and nothing has to move.
-  A narrower version is possible. Rows above the region could go out before the count is known, as long as nothing up there points below, and a region is usually near the top of what it affects. That trades a clear rule for a conditional one, and nothing has yet needed it.
+- **What a region costs (resolved).**
+  A million rows into a region finishes under a 150MB heap, the same as `appendRows`, where it once needed 500MB. Its rows are counted as they are written rather than beforehand, so nothing is held in proportion to the data.
+  Getting there meant moving the row shifting from a transform ahead of the writer into the writer itself. Four attempts to shrink the holding instead had moved the time from 7.4s to 5.6s and the memory not at all, which was the sign that the holding was the design rather than an inefficiency.
+  The write benchmark has `region` and `region-lazy` modes, and `--cap` is the measure worth quoting, since peak RSS counts memory the runtime has not given back.
+  Two shapes still count first, both recorded in decision 15: something above the region reading rows below it, and two regions whose sheets read each other.
 
 - **A grown table's `sortState`.**
   A table part can hold a `sortState` recording the last sort applied to it, with its own `ref` over the data. We rewrite the table's extent and its autofilter range when it grows, and leave `sortState` as it was.

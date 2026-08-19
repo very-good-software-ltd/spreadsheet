@@ -41,6 +41,18 @@ describe("movedSourceRow", () => {
     expect(movedSourceRow(rowAt(10), REMOVE)).toBeUndefined();
   });
 
+  it("moves the range a shared formula covers", () => {
+    const shared: XmlEvent[] = [
+      { type: "open", name: "f", attributes: { t: "shared", ref: "C12:C20", si: "0" } },
+      { type: "text", text: "C11*2" },
+      { type: "close", name: "f" },
+    ];
+    const moved = movedSourceRow(rowAt(12, shared), INSERT);
+
+    expect(moved?.cells[0]?.inner[0]).toMatchObject({ attributes: { ref: "C14:C22" } });
+    expect(moved?.cells[0]?.inner[1]).toEqual({ type: "text", text: "C13*2" });
+  });
+
   it("rewrites a formula in a row that moved", () => {
     const moved = movedSourceRow(rowAt(12, formula("SUM(C9:C11)")), INSERT);
 
@@ -67,6 +79,39 @@ describe("movedSheetEvent", () => {
     const text: XmlEvent = { type: "text", text: "C12" };
 
     expect(movedSheetEvent(text, INSERT)).toBe(text);
+  });
+
+  it("moves every range of a conditional format that covers more than one", () => {
+    const event: XmlEvent = { type: "open", name: "conditionalFormatting", attributes: { sqref: "B12 D12:D14" } };
+
+    expect(movedSheetEvent(event, INSERT)).toMatchObject({ attributes: { sqref: "B14 D14:D16" } });
+  });
+
+  it("moves a data validation, a hyperlink and a filter", () => {
+    const ranges: [string, string, string][] = [
+      ["dataValidation", "sqref", "B12"],
+      ["hyperlink", "ref", "A12"],
+      ["autoFilter", "ref", "A8:C12"],
+    ];
+
+    for (const [name, attribute, value] of ranges) {
+      const moved = movedSheetEvent({ type: "open", name, attributes: { [attribute]: value } }, INSERT);
+
+      expect(moved).toMatchObject({ attributes: { [attribute]: value.replace("12", "14") } });
+    }
+  });
+
+  it("moves the cell a frozen pane starts at", () => {
+    const event: XmlEvent = { type: "open", name: "pane", attributes: { ySplit: "11", topLeftCell: "A12" } };
+
+    expect(movedSheetEvent(event, INSERT)).toMatchObject({ attributes: { topLeftCell: "A14" } });
+  });
+
+  // A page break names the row it sits above by number rather than by reference.
+  it("moves a page break", () => {
+    const event: XmlEvent = { type: "open", name: "brk", attributes: { id: "12", max: "16383" } };
+
+    expect(movedSheetEvent(event, INSERT)).toMatchObject({ attributes: { id: "14" } });
   });
 
   it("refuses an extension list", () => {

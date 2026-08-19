@@ -477,14 +477,14 @@ For its local values, pass its parts.
 
 `appendRows` and `writeRows` pull rows as the output drains, not when you hand them over, so a generator streams and nothing is held.
 
-`writeRegion` is the exception, and it is the one place writing is not flat.
-Filling a region moves everything below it, and how far depends on how many rows arrive, so they are all read before the file is written.
-For a report region that costs nothing. For a million rows it needs roughly a 500MB heap, against 300MB for the same rows through `appendRows`.
+`writeRegion` streams too, and its rows are counted as they are written rather than beforehand.
+A million rows into a region finishes under a 150MB heap, the same as `appendRows`.
 
-So the rule is about your template, not about size.
-Use a region when something below the data has to move. Use `appendRows` when you are exporting a lot and there is nothing underneath.
+There is one shape where it cannot.
+Whatever sits above the region goes out before its rows have been counted, so if something up there reads rows below the region, a summary block at the top of the sheet for instance, the rows have to be counted first and are held while that happens.
+Nothing else about the output differs, and you will not notice unless you are writing a great many rows into a template of that shape.
 
-`npm run benchmark -- --write=1000000` prints all three paths side by side, with peak memory for each.
+`npm run benchmark -- --write=1000000` prints every path side by side, and `--cap=150` shows what is actually held rather than what the runtime has not given back.
 
 <!-- example: write-large-export.ts -->
 
@@ -535,7 +535,7 @@ Two things worth knowing about `writeRegion`.
 
 Only one region per worksheet per save. Writing one moves the rows the others were aimed at.
 
-And the rows you give it are read in full before the file is written, because how far the sheet moves depends on how many there are. For a report region that is nothing. For a million rows it is a million rows, and `appendRows` is the streaming answer there, since nothing sits below appended rows and nothing has to move.
+And a template with a summary block above the region reading rows below it is the one shape where the rows have to be counted before the file is written, rather than as it is written. See "Big exports stay small in memory".
 
 
 ## Streaming and memory

@@ -32,67 +32,6 @@ const REFERENCE_ATTRIBUTES: readonly string[] = [
   Attribute.ActiveCell,
 ];
 
-/**
- * The worksheet's events with every row at or below `shift.at` moved, and every
- * reference on the sheet moved with them.
- *
- * Rows the shift removed are dropped entirely, so a caller downstream sees the
- * sheet as it will be rather than as it was.
- *
- * Throws on anything holding a reference we cannot move with confidence, so a
- * caller can refuse the file rather than write one that is quietly wrong.
- */
-export async function* shiftSheetRows(
-  events: AsyncIterable<readonly XmlEvent[]>,
-  shift: RowShift,
-): AsyncIterable<readonly XmlEvent[]> {
-  let droppingRow = false;
-  let inFormula = false;
-
-  for await (const batch of events) {
-    const moved: XmlEvent[] = [];
-
-    for (const event of batch) {
-      if (droppingRow) {
-        droppingRow = !(event.type === "close" && event.name === Element.Row);
-        continue;
-      }
-
-      if (event.type === "text") {
-        moved.push(inFormula ? { ...event, text: shiftFormula(event.text, shift, shift.sheet) } : event);
-        continue;
-      }
-
-      if (event.type === "close") {
-        inFormula = inFormula && !FORMULA_ELEMENTS.has(event.name);
-        moved.push(event);
-        continue;
-      }
-
-      if (event.name === Element.Extensions) {
-        throw new Error("This worksheet holds an extension list, whose contents cannot be moved with confidence");
-      }
-
-      if (event.name === Element.Row) {
-        const row = movedRow(Number(event.attributes[Attribute.Reference] ?? "0"), shift);
-        if (row === undefined) {
-          droppingRow = true;
-          continue;
-        }
-        moved.push(withAttribute(event, Attribute.Reference, String(row)));
-        continue;
-      }
-
-      inFormula = inFormula || FORMULA_ELEMENTS.has(event.name);
-      moved.push(shiftedEvent(event, shift));
-    }
-
-    if (moved.length > 0) {
-      yield moved;
-    }
-  }
-}
-
 function shiftedEvent(event: XmlOpen, shift: RowShift): XmlEvent {
   let moved: XmlEvent = event;
 

@@ -74,7 +74,7 @@ describe("what stops a worksheet's rows moving", () => {
     });
 
     await expect(writeThreeRowsInto(bytes)).rejects.toThrow(
-      "that sheet has a cell comment at or below row 5, which is positioned by a drawing of its own",
+      "that sheet has a cell comment at or below row 3, which is positioned by a drawing of its own",
     );
   });
 
@@ -84,7 +84,7 @@ describe("what stops a worksheet's rows moving", () => {
     });
 
     await expect(writeThreeRowsInto(bytes)).rejects.toThrow(
-      'Cannot write into "Data": it moves the rows of worksheet "Report" from row 5',
+      'Cannot write into "Data": it moves the rows of worksheet "Report" from row 3',
     );
   });
 });

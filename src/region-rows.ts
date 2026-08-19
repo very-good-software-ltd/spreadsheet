@@ -16,6 +16,11 @@ export interface RegionRows {
 }
 
 /**
+ * `source` placed into `region`'s columns, without being counted, so nothing is
+ * held. The caller learns how many rows there were by counting them as it writes.
+ */
+
+/**
  * Prepares `source` for writing into `region`, placing each row at the region's
  * first column and blanking every column of it the caller did not fill.
  *
@@ -36,7 +41,10 @@ export async function readRegionRows(region: NamedRegion, source: RowSource): Pr
   return held(region, source);
 }
 
-async function* placeEach(region: NamedRegion, source: RowSource): AsyncIterable<readonly (CellInput | undefined)[]> {
+export async function* placeEach(
+  region: NamedRegion,
+  source: RowSource,
+): AsyncIterable<readonly (CellInput | undefined)[]> {
   const width = widthOf(region);
   const row = scratchRow(region, width);
   let written = 0;
