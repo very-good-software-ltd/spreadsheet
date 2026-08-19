@@ -39,9 +39,15 @@ Name Manager still lists `Movements` over its range, so the names in
 `xl/workbook.xml` survive the rewrite of that part. Every expectation on the
 Checks sheet now holds.
 
-Not yet checked since the `Ledger` sheet gained the rows below its table, which
-are what show a growing region pushing content down. Everything above this line
-was checked before that.
+Checked on 2026-08-19, after the writer took ownership of moving rows and after
+`Ledger` gained the rows below its table. Every expectation on the Checks sheet
+holds.
+
+That covers both directions of the model on one run. `Summary` shrinks a region,
+pulls what is below it up and rewrites `SUM(B3:B5)` to `SUM(B3:B3)`. `Ledger`
+grows one, pushes what is below it down and stretches `SUM(D3:D4)` to
+`SUM(D3:D7)`. A total naming the table rather than its rows stays untouched and
+still adds up.
 
 Checked on 2026-08-18, after drawings could move. The picture on `Summary` starts
 on row 7 with one empty row between it and `Total` at row 5. The template has
