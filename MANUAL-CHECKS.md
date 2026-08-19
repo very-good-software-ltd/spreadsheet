@@ -39,6 +39,10 @@ Name Manager still lists `Movements` over its range, so the names in
 `xl/workbook.xml` survive the rewrite of that part. Every expectation on the
 Checks sheet now holds.
 
+Not yet checked since the `Ledger` sheet gained the rows below its table, which
+are what show a growing region pushing content down. Everything above this line
+was checked before that.
+
 Checked on 2026-08-18, after drawings could move. The picture on `Summary` starts
 on row 7 with one empty row between it and `Total` at row 5. The template has
 `Total` at row 7 and the picture at row 9, also one row apart, so the anchor came
@@ -186,7 +190,7 @@ same ground by filling twice, but only Excel can confirm it agrees the name is
 still well formed.
 
 
-## Why the table has a total above it
+## Why the Ledger sheet has totals above and below
 
 The `Ledger` sheet has a table with room for two rows, and the fill writes five,
 so the table has to grow by three.
@@ -199,9 +203,17 @@ ordinary cells outside the table and the total reads 60, which is the first two
 rows we overwrote plus nothing else. A wrong number here is the failure, not a
 missing one.
 
-The total is above the table on purpose. Put it underneath and the table cannot
-grow at all, because that row would have to move down, which is the thing we do
-not do.
+`D1` is above the table and `D9` is below it, and they check different things.
+`D1` names the table, so it keeps covering everything without being touched. `D9`
+is written over the table's rows as a range, `SUM(D3:D4)` in the template, so it
+has to be rewritten to `SUM(D3:D7)` and moved down three rows along with the
+`Checked` label beside it and the line of plain text under that.
+
+That is the half of the model the `Summary` sheet cannot show. `Summary` shrinks a
+region and pulls what is below it up. `Ledger` grows one and pushes what is below
+it down. Between them the two directions are covered, and they have to be on
+separate sheets because two regions cannot share one: writing either would move the
+rows the other was aimed at.
 
 Clicking inside the last row and looking for Table Design on the ribbon asks the
 same question more weakly, and is only worth doing if the total looks wrong and

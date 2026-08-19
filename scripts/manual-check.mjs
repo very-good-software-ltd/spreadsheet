@@ -107,6 +107,17 @@ const EXPECTATIONS = [
     "The ribbon shows Table Design",
     "The last row we added really is inside the table, not just formatted like it",
   ],
+  [
+    "Ledger row 9",
+    "Checked, and 150, where the template had them on row 6",
+    "Growing the region pushed what was under it down by the three rows that arrived",
+  ],
+  [
+    "Ledger!D9",
+    "The formula bar shows SUM(D3:D7), not SUM(D3:D4)",
+    "A total written over the region by range, rather than by the table's name, stretched to cover the rows that arrived",
+  ],
+  ["Ledger!B10", "Prepared by A. Person", "Plain text below the region moved down with everything else"],
 ];
 
 async function buildTemplate() {
@@ -227,6 +238,15 @@ async function buildTemplate() {
   // chart, and a chart is anchored the same way, so an image stands in for one.
   const logo = workbook.addImage({ base64: PIXEL_PNG, extension: "png" });
   summary.addImage(logo, { tl: { col: 0, row: 8 }, ext: { width: 120, height: 60 } });
+
+  // Below the table, so growing it has to push these down. The total is written
+  // over the table's rows by range rather than by name, so it also has to stretch
+  // to cover the rows that arrive.
+  ledger.getCell("B6").value = "Checked";
+  ledger.getCell("B6").font = { bold: true };
+  ledger.getCell("D6").value = { formula: "SUM(D3:D4)", result: 0 };
+  ledger.getCell("D6").font = { bold: true };
+  ledger.getCell("B7").value = "Prepared by A. Person";
 
   const notes = workbook.addWorksheet("Notes");
   notes.getCell("A1").value = "This sheet is never opened by the fill, so every byte of it should survive.";
