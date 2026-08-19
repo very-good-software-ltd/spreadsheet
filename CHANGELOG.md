@@ -12,10 +12,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Filling a region no longer holds your rows. A million rows finishes under a 150MB heap, the same as `appendRows`, where it needed 500MB before. Nothing about the output changes.
   The rows are counted as they are written rather than beforehand. One shape still counts first: a sheet with something above the region that reads rows below it, since that has to go out before the count is known.
 
-### Added
-
-- `region-stream` and `region-load` modes in the write benchmark, so the memory cost of filling a region sits next to the streaming and load-everything paths rather than being described in prose.
-- `npm run benchmark:read` and `npm run benchmark:write`, with `npm run benchmark` now running both. Writing defaults to a million rows, so seeing what a change did no longer means remembering an argument. Add `--cap=150` to see what is actually held rather than what the runtime has not given back.
 
 ## [0.3.0] - 2026-08-18
 
