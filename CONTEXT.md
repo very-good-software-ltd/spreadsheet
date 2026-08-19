@@ -282,6 +282,34 @@ A region shrinks to one row and no further. A range whose every endpoint is dele
 
 Excel is more forgiving here than we assumed. A range with one endpoint inside the deleted rows shrinks to what survives, rather than breaking, so `=SUM(C9:C13)` minus row 13 becomes `=SUM(C9:C12)`. Only a reference with nothing left to point at dies, which is a single cell in a deleted row or a range wholly inside them. Confirmed by hand in Excel on 2026-08-18.
 
+#### What has to be known by the time each part is written
+
+Almost every hard call in this decision follows from one constraint, so it is worth stating on its own rather than leaving it to be re-derived.
+
+A file is written in one pass, front to back, and a part already written cannot be revised. So a part can only depend on something learned before it was written.
+
+The one thing that has to be learned is how far the rows moved, and it is learned by counting the caller's rows, which happens when the region is reached. "Above" and "below" mean earlier and later in the sheet's rows, which is also earlier and later in the output, and that is the only reason the distinction matters.
+
+```
+        written                         knows the move?
+  ---------------------------------------------------------
+   1    the region's own sheet
+          everything above the region    no
+          the region's rows              being counted here
+          everything below the region    yes
+   2    every other sheet                yes
+   3    the drawings of the moved sheet  yes
+   4    the workbook part, for its names yes
+   5    a grown table's part             yes
+   6    the styles part                  no move involved
+```
+
+Everything from the region's own rows onward already knows, so it needs nothing special. Only the first box is a problem, and only when something in it reads rows below the region. That is why the writer buffers what is above, checks whether any of it points down, and only counts the rows first when it has to.
+
+Steps 2 to 5 are written after step 1 for this reason and no other. The styles part is last for a reason of its own, which is that a date only learns which cell format it needs while its sheet is written.
+
+The same constraint decides the multi-region rule. Two regions on sheets whose formulas read each other would each need to be step 1, and there is no order in which both are.
+
 A region's rows are counted as they are written, so nothing is held.
 
 That is only possible because the writer owns the move. The move used to be a transform sitting ahead of the writer, which meant it had to know how far the rows went before the writer had counted them, so every row was read first. Now the writer renumbers as it goes, because only it knows when the region has been filled.
