@@ -484,7 +484,7 @@ There is one shape where it cannot.
 Whatever sits above the region goes out before its rows have been counted, so if something up there reads rows below the region, a summary block at the top of the sheet for instance, the rows have to be counted first and are held while that happens.
 Nothing else about the output differs, and you will not notice unless you are writing a great many rows into a template of that shape.
 
-`npm run benchmark -- --write=1000000` prints every path side by side, and `--cap=150` shows what is actually held rather than what the runtime has not given back.
+`npm run benchmark:write` prints every path side by side. Add `--cap=150` to see what is actually held, rather than what the runtime has not yet given back to the operating system.
 
 <!-- example: write-large-export.ts -->
 
@@ -589,6 +589,8 @@ In `.ods` files, some things read but not fully:
 ```sh
 npm run verify        # lint, typecheck, and tests
 npm run build         # build the package into dist
-npm run benchmark     # compare against other libraries, see benchmark/
+npm run benchmark     # reading and writing, against other libraries, see benchmark/
+npm run benchmark:read   # reading only
+npm run benchmark:write  # writing only, a million rows
 npm run manual-check  # build a filled template to open in Excel, see MANUAL-CHECKS.md
 ```

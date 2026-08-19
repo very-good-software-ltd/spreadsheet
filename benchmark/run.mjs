@@ -1,12 +1,22 @@
 // Runs the worker once per (library, file) in its own process, so no library's
-// memory bleeds into another's measurement, and prints a table. With no file
-// arguments it runs every .xlsx in benchmark/files, skipping names that start
-// with an underscore. Those files are gitignored, so drop any files in there to
-// play with, and prefix a name with _ to leave it out of a run. Pass --cap=512
-// to run the workers under a heap cap to see which libraries run out of memory.
+// memory bleeds into another's measurement, and prints a table.
 //
-// Pass --write=1000000 to benchmark writing instead of reading, or a list like
-// --write=100000,1000000 to see whether peak memory moves with the row count.
+//   npm run benchmark          reading and writing
+//   npm run benchmark:read     reading only
+//   npm run benchmark:write    writing only
+//
+// Reading covers every .xlsx and .ods in benchmark/files, skipping names that
+// start with an underscore. Those files are gitignored, so drop any files in there
+// to play with, and prefix a name with _ to leave it out of a run. Pass file paths
+// as arguments to read those instead.
+//
+// Writing is a million rows by default. Pass --write=100000 for a quicker loop, or
+// a list like --write=100000,1000000 to see whether peak memory moves with the row
+// count.
+//
+// Pass --cap=150 to run the workers under a heap cap. That is the measure worth
+// quoting for memory, since peak RSS also counts memory the runtime has not given
+// back to the OS, and it shows which libraries run out.
 import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -43,18 +53,30 @@ function runsFor(file) {
 const reader = fileURLToPath(new URL("./read-file.mjs", import.meta.url));
 const writer = fileURLToPath(new URL("./write-file.mjs", import.meta.url));
 
+const DEFAULT_ROW_COUNT = 1_000_000;
+
 const args = process.argv.slice(2);
 const capArg = args.find((arg) => arg.startsWith("--cap="));
 const cap = capArg ? Number(capArg.slice("--cap=".length)) : undefined;
-const writeArg = args.find((arg) => arg.startsWith("--write="));
-const rowCounts = writeArg
-  ? writeArg
-      .slice("--write=".length)
-      .split(",")
-      .map((count) => Number(count))
-  : [];
+
+const writeArg = args.find((arg) => arg === "--write" || arg.startsWith("--write="));
+const readArg = args.some((arg) => arg === "--read");
 const explicit = args.filter((arg) => !arg.startsWith("--"));
-const targets = explicit.length > 0 ? explicit : rowCounts.length > 0 ? [] : discoverFiles();
+
+// Neither asked for means both, so running it bare shows everything rather than
+// half of it. Either one asked for means only that one.
+const reading = readArg || explicit.length > 0 || writeArg === undefined;
+const writing = writeArg !== undefined || !readArg;
+
+const rowCounts = !writing
+  ? []
+  : writeArg === undefined || writeArg === "--write"
+    ? [DEFAULT_ROW_COUNT]
+    : writeArg
+        .slice("--write=".length)
+        .split(",")
+        .map((count) => Number(count));
+const targets = !reading ? [] : explicit.length > 0 ? explicit : discoverFiles();
 
 function discoverFiles() {
   let names;
@@ -68,7 +90,7 @@ function discoverFiles() {
     .map((name) => `${FILES_DIR}/${name}`);
 }
 
-if (targets.length === 0 && rowCounts.length === 0) {
+if (reading && targets.length === 0 && rowCounts.length === 0) {
   console.log(`No .xlsx or .ods files in ${FILES_DIR}. Add some there, or pass file paths as arguments.`);
   console.log("To benchmark writing instead, pass --write=1000000.");
   process.exit(0);

@@ -29,6 +29,8 @@
   ],
   "scripts": {
     "benchmark": "npm run build && node benchmark/run.mjs",
+    "benchmark:read": "npm run build && node benchmark/run.mjs --read",
+    "benchmark:write": "npm run build && node benchmark/run.mjs --write",
     "build": "vite build && tsc -p tsconfig.build.json",
     "examples": "node scripts/sync-examples.mjs",
     "examples:check": "node scripts/sync-examples.mjs --check",

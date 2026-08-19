@@ -14,7 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- `region` and `region-lazy` modes in the write benchmark, so the memory cost of filling a region sits next to the streaming and load-everything paths rather than being described in prose. `npm run benchmark -- --write=1000000`, and add `--cap=500` to see what is actually held rather than what the runtime has not given back.
+- `region` and `region-lazy` modes in the write benchmark, so the memory cost of filling a region sits next to the streaming and load-everything paths rather than being described in prose.
+- `npm run benchmark:read` and `npm run benchmark:write`, with `npm run benchmark` now running both. Writing defaults to a million rows, so seeing what a change did no longer means remembering an argument. Add `--cap=150` to see what is actually held rather than what the runtime has not given back.
 
 ## [0.3.0] - 2026-08-18
 
