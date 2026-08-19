@@ -19,9 +19,12 @@ This is an honest attempt to see how far a fresh, modern take can get.
 
 We read `.xlsx` (OOXML) and `.ods` (OpenDocument), both a ZIP of XML parts, so they share the zip and xml layers and the `WorkbookData` seam.
 `Workbook.open` sniffs the archive to pick the reader, `xl/workbook.xml` for xlsx and the spreadsheet `mimetype` for ods.
-Legacy `.xls` (BIFF8, OLE2 compound binary) and `.xlsb` are still out of scope. They are separate binary containers with their own parsers.
+Legacy `.xls` (BIFF8, OLE2 compound binary) and `.xlsb` are still out of scope.
+They are separate binary containers with their own parsers.
 
-Changed: `.ods` was originally out of scope. It was added once the format-neutral seam made a second ZIP based format cheap. The `.ods` reader has known gaps, see the open questions.
+Changed: `.ods` was originally out of scope.
+It was added once the format-neutral seam made a second ZIP based format cheap.
+The `.ods` reader has known gaps, see the open questions.
 
 
 ### 2. Reading first, then writing
@@ -29,7 +32,9 @@ Changed: `.ods` was originally out of scope. It was added once the format-neutra
 Version 1 reads files.
 The whole read design was shaped around reading alone, and writing was designed on top of it afterwards rather than alongside it.
 
-Changed: writing was originally deferred with no design at all. Decisions 11 and 12 now cover it. The read path is unchanged by it, because the writer works below the `WorkbookData` seam on the archive and the raw XML, not on the interpreted rows.
+Changed: writing was originally deferred with no design at all.
+Decisions 11 and 12 now cover it.
+The read path is unchanged by it, because the writer works below the `WorkbookData` seam on the archive and the raw XML, not on the interpreted rows.
 
 
 ### 3. Runs in Node and the browser
@@ -60,7 +65,8 @@ The ZIP interface follows the same idea: list entries, open an entry as a stream
 
 The primary API is async iterables for sheets and rows.
 This is to better support large files and matches the engine underneath.
-We add no eager helper like `.toArray()`. The platform's `Array.fromAsync` or a plain loop collects everything when a caller wants it, and breaking the loop reads only the first rows.
+We add no eager helper like `.toArray()`.
+The platform's `Array.fromAsync` or a plain loop collects everything when a caller wants it, and breaking the loop reads only the first rows.
 
 
 ### 7. TypeScript 7, strict, Vite and Vitest
@@ -86,9 +92,13 @@ We publish to npm.
 Vite builds the JavaScript and TypeScript 7's own `tsc` emits the type files, so the whole toolchain runs on one TypeScript version with no second compiler.
 ES module only, no CommonJS build.
 
-The type emit needs its own `tsconfig.build.json`. The root `tsconfig.json` sets `noEmit` and covers `src`, `test`, and `examples` for checking, so the build config extends it, narrows the input to `src`, and turns emit on. This is the one config split decision 7 allows for a reason other than global types, an emit that must see only the shipped source.
+The type emit needs its own `tsconfig.build.json`.
+The root `tsconfig.json` sets `noEmit` and covers `src`, `test`, and `examples` for checking, so the build config extends it, narrows the input to `src`, and turns emit on.
+This is the one config split decision 7 allows for a reason other than global types, an emit that must see only the shipped source.
 
-We do not use a dts plugin. `unplugin-dts` needs a 6.x compiler for the JavaScript Compiler API that TypeScript 7's native port dropped, and `rolldown-plugin-dts`'s tsgo backend, which would use TypeScript 7, is experimental and its bundler fails on our declarations with a false missing-export error. Plain `tsc` emit avoids both and produces the same per file declarations.
+We do not use a dts plugin.
+`unplugin-dts` needs a 6.x compiler for the JavaScript Compiler API that TypeScript 7's native port dropped, and `rolldown-plugin-dts`'s tsgo backend, which would use TypeScript 7, is experimental and its bundler fails on our declarations with a false missing-export error.
+Plain `tsc` emit avoids both and produces the same per file declarations.
 
 
 ### 9. A hand rolled ZIP reader for real streaming
@@ -98,7 +108,9 @@ This keeps memory bounded for a large sheet, since the decompressed bytes are pu
 `fflate` could not give us backpressured decompression, so it moved to a development dependency.
 We accept the maintenance of hand rolled binary parsing because the part of the ZIP format that xlsx uses is frozen, the surface is small and read only, and correctness is pinned by comparing our reader against `fflate` on many archives.
 Zip64, encryption, and unknown compression methods are not supported and throw rather than misread.
-The writer added by decision 11 holds the same line from the other side. A size, an offset or an entry count past what a 32-bit or 16-bit header field holds throws rather than writing the wrapped value, which would produce an archive no reader opens. So 4 GB is the ceiling in both directions, and lifting it is one piece of work on both halves rather than two.
+The writer added by decision 11 holds the same line from the other side.
+A size, an offset or an entry count past what a 32-bit or 16-bit header field holds throws rather than writing the wrapped value, which would produce an archive no reader opens.
+So 4 GB is the ceiling in both directions, and lifting it is one piece of work on both halves rather than two.
 
 
 ### 10. Honest about size and memory claims
@@ -109,32 +121,42 @@ Opt-in heavy features like formula evaluation will not be flat, so we do not cla
 Specific size and peak-memory numbers live in the benchmark, where they are dated and reproducible, not in taglines.
 
 Changed: this used to also frame bundle size as paying only for what you use, on the condition that reading never pulls in the writer.
-Decision 12 gives that up on purpose. `edit()` is an instance method on `Workbook`, which is a hard reference no bundler can drop, so every reader now ships the writer.
-We chose one coherent entry surface over a tree-shakeable one. The claim is dropped rather than quietly falsified.
+Decision 12 gives that up on purpose.
+`edit()` is an instance method on `Workbook`, which is a hard reference no bundler can drop, so every reader now ships the writer.
+We chose one coherent entry surface over a tree-shakeable one.
+The claim is dropped rather than quietly falsified.
 
 
 ### 11. Writing copies the file and rewrites only what it must
 
 Writing takes a base workbook, collects edits, and produces a new file in one streaming pass at save.
-Nothing is written per cell, and nothing is modified in place. The input is never touched.
+Nothing is written per cell, and nothing is modified in place.
+The input is never touched.
 
 Every archive entry we do not edit is copied across as stored bytes, without recompressing and without parsing.
 Charts, pivot tables, drawings, themes, macros and custom parts survive because we never look at them.
-This is the whole point. `exceljs` reads a file into a model and re-serialises the whole thing from an allowlist of parts it understands (`lib/xlsx/xlsx.js`), so read-then-write drops pivot caches, chart parts and custom XML. A copy-through writer cannot lose a part it does not know about.
+This is the whole point.
+`exceljs` reads a file into a model and re-serialises the whole thing from an allowlist of parts it understands (`lib/xlsx/xlsx.js`), so read-then-write drops pivot caches, chart parts and custom XML.
+A copy-through writer cannot lose a part it does not know about.
 
 For the same reason the sheet rewrite is a transform over the XML event stream, not a serialisation of our `Cell` model.
-Our read model is deliberately lossy. It drops the style index, merged ranges, column widths, data validations and conditional formats.
+Our read model is deliberately lossy.
+It drops the style index, merged ranges, column widths, data validations and conditional formats.
 Rebuilding a sheet from it would destroy exactly the formatting a template exists to carry.
 So we pass every event through untouched and intervene only at the cells being written.
 
 Creating a file from scratch is the same path over an empty base workbook, so there is no separate write mode and no second code path.
 
-Scope is `.xlsx` only. `.ods` writing is a second full implementation that shares none of the fidelity work.
+Scope is `.xlsx` only.
+`.ods` writing is a second full implementation that shares none of the fidelity work.
 
 Rows can be written at a given row number, overwriting what is there, or appended after the last row.
-Neither moves anything, and neither ever will. `writeRows` and `appendRows` are the streaming path, where the caller knows the shape of the sheet and nothing is below the rows being written.
+Neither moves anything, and neither ever will.
+`writeRows` and `appendRows` are the streaming path, where the caller knows the shape of the sheet and nothing is below the rows being written.
 
-Changed: this used to refuse row insertion outright, for the reasons decision 15 now records and answers. Moving content lives there, on a named region, and not on these two.
+Changed: this used to refuse row insertion outright, for the reasons decision 15 now records and answers.
+Moving content lives there, on a named region, and not on these two.
+
 
 ### 12. The write API is one surface with the reader
 
@@ -154,7 +176,8 @@ Two statics both hand back a `Workbook`, and one instance method flips to writin
 
 `save` returns a stream rather than bytes, and rows are pulled from their source as it drains.
 Bytes would mean holding the whole output, which breaks on the way out the memory promise the read path keeps on the way in.
-The cost is that a failed save leaves a partial file with no undo. We accept it because a zip's directory sits at its end, so a truncated write is a file no reader will open rather than a subtly wrong spreadsheet.
+The cost is that a failed save leaves a partial file with no undo.
+We accept it because a zip's directory sits at its end, so a truncated write is a file no reader will open rather than a subtly wrong spreadsheet.
 `save` throws if called twice, because an already-drained row source would silently produce a valid file with rows missing.
 
 Row sources are `Iterable` or `AsyncIterable`, so an array works with no ceremony and a generator streams.
@@ -162,14 +185,20 @@ Nothing is consumed until save, which means an error in a caller's generator sur
 Everything else we can check, a malformed reference or an unknown sheet, is validated eagerly at the call, so the caller's own source is the only thing left that can fail late.
 
 A cell value is `number | string | boolean | null | Formula | SpreadsheetDate`.
-Errors are not writable. An error is a result, not an input, and the way to put one in a cell is a formula that produces it, such as `NA()`.
-`null` blanks a cell and keeps its formatting, which is the template intent. Removing a cell outright is not offered.
+Errors are not writable.
+An error is a result, not an input, and the way to put one in a cell is a formula that produces it, such as `NA()`.
+`null` blanks a cell and keeps its formatting, which is the template intent.
+Removing a cell outright is not offered.
 Writing a plain value over a formula cell drops the formula, which is the one place the writer discards template content on purpose.
-`formula()` is a constructor rather than a bare string so that ods writing could later translate inside it without touching a call site. Its text is the A1 form Excel uses, a leading `=` is stripped, and it is emitted unparsed and unvalidated.
+`formula()` is a constructor rather than a bare string so that ods writing could later translate inside it without touching a call site.
+Its text is the A1 form Excel uses, a leading `=` is stripped, and it is emitted unparsed and unvalidated.
 
 `date()` is a constructor for the same reason, and a `Date` is refused outright.
-A cell holds a calendar date with no time zone while a `Date` is an instant, so converting one means picking a zone, and either choice is silently wrong for some caller. `new Date(2026, 2, 1)` is local midnight, which west of UTC is the last day of February, and date libraries hand out local-midnight `Date`s by default.
-We first shipped this accepting a `Date` read as UTC and documenting the trap. That failed our own bar: a confidently wrong quirk is worse than an open one, and a wrong day in a report is the worst failure class here. Refusing the type moves the mistake to compile time.
+A cell holds a calendar date with no time zone while a `Date` is an instant, so converting one means picking a zone, and either choice is silently wrong for some caller.
+`new Date(2026, 2, 1)` is local midnight, which west of UTC is the last day of February, and date libraries hand out local-midnight `Date`s by default.
+We first shipped this accepting a `Date` read as UTC and documenting the trap.
+That failed our own bar: a confidently wrong quirk is worse than an open one, and a wrong day in a report is the worst failure class here.
+Refusing the type moves the mistake to compile time.
 `date()` also rejects a day that does not exist instead of letting `Date.UTC` roll it into the next month.
 
 A cell is addressed by its reference string, matching `Cell.ref` on the read side.
@@ -179,7 +208,8 @@ A coordinate-to-reference helper can be added if callers want one, which also an
 Last write wins when a cell is covered twice.
 Rejecting a conflict is not implementable, since spotting the overlap would mean draining the lazy row source at call time.
 
-Deleting and renaming sheets is out. A sheet's name is written into every formula that reads it, into defined names, into pivot sources and into chart series, and its id into the parts that point at it, so either one ripples through the whole package rather than through one sheet.
+Deleting and renaming sheets is out.
+A sheet's name is written into every formula that reads it, into defined names, into pivot sources and into chart series, and its id into the parts that point at it, so either one ripples through the whole package rather than through one sheet.
 
 
 ### 13. Formatting is described in the template, never in our API
@@ -219,11 +249,15 @@ This is the same reason `formula()` is a constructor.
 
 The order of anchors is deliberate.
 Named regions come first, because the author placed them on purpose, the format keeps them correct, and they cost one more element in `xl/workbook.xml`, a part we already stream at open.
-Excel Tables come second. A table's writable region is the rows between its header and its totals row, since neither is a place for a caller's data, while its extent covers both.
+Excel Tables come second.
+A table's writable region is the rows between its header and its totals row, since neither is a place for a caller's data, while its extent covers both.
 
-Its extent and its autofilter range move with the rows, so a total written as a structured reference like `=SUM(Sales[Amount])`, or as a whole column `=SUM(B:B)`, keeps covering everything however many rows arrive. Neither names a row number, which is the whole reason to anchor on a table.
+Its extent and its autofilter range move with the rows, so a total written as a structured reference like `=SUM(Sales[Amount])`, or as a whole column `=SUM(B:B)`, keeps covering everything however many rows arrive.
+Neither names a row number, which is the whole reason to anchor on a table.
 
-Changed: a table with a totals row used to be refused, and a table used to grow but never shrink. Both existed only because nothing could move. Decision 15 moves rows, so the totals row goes down with everything else and a table pulls in as readily as it stretches.
+Changed: a table with a totals row used to be refused, and a table used to grow but never shrink.
+Both existed only because nothing could move.
+Decision 15 moves rows, so the totals row goes down with everything else and a table pulls in as readily as it stretches.
 Matching a header row by its text does not happen.
 It is a guess wearing an anchor's clothes, and a guess that silently picks the wrong row is the failure class we turned down `insertRow` over.
 
@@ -231,7 +265,10 @@ A named region is a contract about an area, not a starting coordinate.
 A row wider than the region is refused rather than spilling into the column beside it.
 A row that stops short has the rest of its columns cleared, because what is sitting there is the last run's data formatted exactly like this run's, while a gap the caller writes as `undefined` still means leave that cell alone, since the length of a row is not a decision about the columns past its end.
 
-Changed: the region's height used to be a contract too, so more rows than it held was refused and fewer cleared the remainder in place. Decision 15 replaces that. The region is now as tall as the data and the sheet moves around it. The width is still a contract, because nothing moves sideways.
+Changed: the region's height used to be a contract too, so more rows than it held was refused and fewer cleared the remainder in place.
+Decision 15 replaces that.
+The region is now as tall as the data and the sheet moves around it.
+The width is still a contract, because nothing moves sideways.
 This is what closes the totals-block gap in the open questions below.
 We could not detect a totals block because we did not know where the data region ended.
 A named region is the author telling us.
@@ -250,7 +287,9 @@ The shadowing is visible in the API rather than a rule to remember.
 
 ### 15. A named region holds exactly the data it is given, and the sheet moves around it
 
-Changed: decision 11 refused row insertion outright, and decision 14 made a named region a fixed box. Both are replaced here. What follows is why.
+Changed: decision 11 refused row insertion outright, and decision 14 made a named region a fixed box.
+Both are replaced here.
+What follows is why.
 
 A template is a document with a hole in it.
 Everything above the hole stays, everything below it stays below, and the hole is as big as the data.
@@ -260,35 +299,58 @@ Each of those is a thing we would rather not have to say.
 So writing into a named region makes the region exactly as tall as the rows it is given.
 More rows than it holds inserts rows and pushes everything below down.
 Fewer deletes rows and pulls everything below up.
-This is the same operation a person performs in Excel with Insert and Delete, so the semantics are not ours to invent. They are observable, and a disagreement with Excel is a bug rather than a design question.
+This is the same operation a person performs in Excel with Insert and Delete, so the semantics are not ours to invent.
+They are observable, and a disagreement with Excel is a bug rather than a design question.
 
-Where the rows go in is not arbitrary. Excel stretches a range only when rows appear strictly inside it, so making room happens at the region's last row rather than after it. A total written `=SUM(C9:C11)` over a region of rows 9 to 11 then becomes `=SUM(C9:C13)` when two rows arrive, which is what the author meant. Inserting after row 11 would leave it summing three rows of five. Deleting works from the far end for the same reason, so the first rows and their formatting are the ones kept.
+Where the rows go in is not arbitrary.
+Excel stretches a range only when rows appear strictly inside it, so making room happens at the region's last row rather than after it.
+A total written `=SUM(C9:C11)` over a region of rows 9 to 11 then becomes `=SUM(C9:C13)` when two rows arrive, which is what the author meant.
+Inserting after row 11 would leave it summing three rows of five.
+Deleting works from the far end for the same reason, so the first rows and their formatting are the ones kept.
 
-Decision 11's objection stands as a description of the work rather than as a reason not to do it. Shifting content means rewriting everything that pointed below the insertion, and `exceljs` offers insertion without doing that, which is why a total that summed rows 6 to 20 still sums 6 to 20 afterwards. Silently wrong numbers are still worse than a missing feature. The conclusion changes because there is a third option we did not consider: do the work where we can and refuse the file where we cannot.
+Decision 11's objection stands as a description of the work rather than as a reason not to do it.
+Shifting content means rewriting everything that pointed below the insertion, and `exceljs` offers insertion without doing that, which is why a total that summed rows 6 to 20 still sums 6 to 20 afterwards.
+Silently wrong numbers are still worse than a missing feature.
+The conclusion changes because there is a third option we did not consider: do the work where we can and refuse the file where we cannot.
 
-So a save either produces a correct file or throws naming what stopped it. Never a file that is quietly wrong.
+So a save either produces a correct file or throws naming what stopped it.
+Never a file that is quietly wrong.
 
 In scope to move: rows and cells, merged ranges, conditional formatting and data validation ranges, hyperlinks, autofilter, frozen panes, row breaks, table extents, defined names, formula references on the sheet and on every other sheet pointing at it, and the anchors a drawing places its shapes by.
 
-Refused, naming the thing: a pivot table whose source covers the region. A comment below it. A formula we cannot rewrite with confidence. And a shape standing only on rows that are going away, since nothing is left to hang it from and dropping a chart in silence is worse than refusing.
+Refused, naming the thing: a pivot table whose source covers the region.
+A comment below it.
+A formula we cannot rewrite with confidence.
+And a shape standing only on rows that are going away, since nothing is left to hang it from and dropping a chart in silence is worse than refusing.
 
 A drawing counts rows from zero where a sheet counts from one, and an absolute anchor names no row at all and does not move, which matches Excel.
 
-Comments stay refused for a reason of their own. A comment carries a reference in one part and its position in a second, written in VML, a legacy format we have no reader for. Moving the reference alone would leave the box it appears in behind.
+Comments stay refused for a reason of their own.
+A comment carries a reference in one part and its position in a second, written in VML, a legacy format we have no reader for.
+Moving the reference alone would leave the box it appears in behind.
 
-Changed: drawings were refused in the first version, deliberately, so that something worked before the hardest part was attempted. They move now.
+Changed: drawings were refused in the first version, deliberately, so that something worked before the hardest part was attempted.
+They move now.
 
-A region shrinks to one row and no further. A range whose every endpoint is deleted becomes `#REF!` in Excel, so one surviving row is what keeps a total written over the region alive, and it costs one blank formatted row on a run with no data at all. Collapsing it entirely is a later option and changes nothing else.
+A region shrinks to one row and no further.
+A range whose every endpoint is deleted becomes `#REF!` in Excel, so one surviving row is what keeps a total written over the region alive, and it costs one blank formatted row on a run with no data at all.
+Collapsing it entirely is a later option and changes nothing else.
 
-Excel is more forgiving here than we assumed. A range with one endpoint inside the deleted rows shrinks to what survives, rather than breaking, so `=SUM(C9:C13)` minus row 13 becomes `=SUM(C9:C12)`. Only a reference with nothing left to point at dies, which is a single cell in a deleted row or a range wholly inside them. Confirmed by hand in Excel on 2026-08-18.
+Excel is more forgiving here than we assumed.
+A range with one endpoint inside the deleted rows shrinks to what survives, rather than breaking, so `=SUM(C9:C13)` minus row 13 becomes `=SUM(C9:C12)`.
+Only a reference with nothing left to point at dies, which is a single cell in a deleted row or a range wholly inside them.
+Confirmed by hand in Excel on 2026-08-18.
+
 
 #### What has to be known by the time each part is written
 
 Almost every hard call in this decision follows from one constraint, so it is worth stating on its own rather than leaving it to be re-derived.
 
-A file is written in one pass, front to back, and a part already written cannot be revised. So a part can only depend on something learned before it was written.
+A file is written in one pass, front to back, and a part already written cannot be revised.
+So a part can only depend on something learned before it was written.
 
-The one thing that has to be learned is how far the rows moved, and it is learned by counting the caller's rows, which happens when the region is reached. "Above" and "below" mean earlier and later in the sheet's rows, which is also earlier and later in the output, and that is the only reason the distinction matters.
+The one thing that has to be learned is how far the rows moved, and it is learned by counting the caller's rows, which happens when the region is reached.
+"Above" and "below" mean earlier and later in the sheet's rows, which is also earlier and later in the output, and that is the only reason the distinction matters.
 
 ```
         written                         knows the move?
@@ -304,29 +366,46 @@ The one thing that has to be learned is how far the rows moved, and it is learne
    6    the styles part                  no move involved
 ```
 
-Everything from the region's own rows onward already knows, so it needs nothing special. Only the first box is a problem, and only when something in it reads rows below the region. That is why the writer buffers what is above, checks whether any of it points down, and only counts the rows first when it has to.
+Everything from the region's own rows onward already knows, so it needs nothing special.
+Only the first box is a problem, and only when something in it reads rows below the region.
+That is why the writer buffers what is above, checks whether any of it points down, and only counts the rows first when it has to.
 
-Steps 2 to 5 are written after step 1 for this reason and no other. The styles part is last for a reason of its own, which is that a date only learns which cell format it needs while its sheet is written.
+Steps 2 to 5 are written after step 1 for this reason and no other.
+The styles part is last for a reason of its own, which is that a date only learns which cell format it needs while its sheet is written.
 
-The same constraint decides the multi-region rule. Two regions on sheets whose formulas read each other would each need to be step 1, and there is no order in which both are.
+The same constraint decides the multi-region rule.
+Two regions on sheets whose formulas read each other would each need to be step 1, and there is no order in which both are.
 
 A region's rows are counted as they are written, so nothing is held.
 
-That is only possible because the writer owns the move. The move used to be a transform sitting ahead of the writer, which meant it had to know how far the rows went before the writer had counted them, so every row was read first. Now the writer renumbers as it goes, because only it knows when the region has been filled.
+That is only possible because the writer owns the move.
+The move used to be a transform sitting ahead of the writer, which meant it had to know how far the rows went before the writer had counted them, so every row was read first.
+Now the writer renumbers as it goes, because only it knows when the region has been filled.
 
-Two shapes still have to count first. Whatever sits above the region goes out before its rows are counted, so if anything up there reads rows below the region it cannot be written until the count is known. And two regions in one save, on sheets whose formulas read each other, cannot be ordered so that both learn about the other first. Both fall back to counting first, which is what every region used to do.
+Two shapes still have to count first.
+Whatever sits above the region goes out before its rows are counted, so if anything up there reads rows below the region it cannot be written until the count is known.
+And two regions in one save, on sheets whose formulas read each other, cannot be ordered so that both learn about the other first.
+Both fall back to counting first, which is what every region used to do.
 
-This supersedes the table growth rule from decision 14. A table with a totals row was refused because that row would have to move. Now it moves, so a table grows whatever is under it, and the advice to put a total above a table goes with it.
+This supersedes the table growth rule from decision 14.
+A table with a totals row was refused because that row would have to move.
+Now it moves, so a table grows whatever is under it, and the advice to put a total above a table goes with it.
 
 
 ## Open questions
 
 - **Cell value typing (resolved).**
-  A cell is a typed union: number, string, boolean, date, error, and formula. The caller reads `type` and gets a matching `value`, rather than raw strings to interpret. A formula cell carries its text as `value` and its cached result as `cachedValue`, and `ResolvedValue` is the union minus the formula variant, so a cached result cannot itself be a formula.
+  A cell is a typed union: number, string, boolean, date, error, and formula.
+  The caller reads `type` and gets a matching `value`, rather than raw strings to interpret.
+  A formula cell carries its text as `value` and its cached result as `cachedValue`, and `ResolvedValue` is the union minus the formula variant, so a cached result cannot itself be a formula.
 - **Scope of content for v1 (resolved).**
-  Formulas, styles, number formats, and date interpretation are all in, not raw values only. A date comes back as a `Date`, from the serial number and its style in xlsx or the ISO value in ods. A formula reads as its cached value.
+  Formulas, styles, number formats, and date interpretation are all in, not raw values only.
+  A date comes back as a `Date`, from the serial number and its style in xlsx or the ISO value in ods.
+  A formula reads as its cached value.
 - **Shared strings and large sheets (resolved).**
-  The sheet XML streams row by row and is never held. The shared strings table is read into memory and held, because cells reference it by index. So peak tracks the shared strings table plus a working window, not the sheet size, and a huge shared strings table is the remaining floor.
+  The sheet XML streams row by row and is never held.
+  The shared strings table is read into memory and held, because cells reference it by index.
+  So peak tracks the shared strings table plus a working window, not the sheet size, and a huge shared strings table is the remaining floor.
 - **Column identifier: number vs letter.**
   A cell's column is a zero-based `columnIndex` for now.
   We considered the spreadsheet letter (`"A"`, `"AB"`) since it feels closer to Excel, but consumers do positional and arithmetic work with columns, and the letter is already in the cell `ref`.
@@ -339,12 +418,14 @@ This supersedes the table growth rule from decision 14. A table with a totals ro
   And the reader holds saxes's attributes object instead of copying it on every open tag.
   Together these took the streaming time from about 9.9s to 3.4s, which is the fastest and the leanest on memory of the libraries we compared.
 - **Browser packaging.**
-  The library ships one ES module built on web standards (`Uint8Array`, `ReadableStream`, `DecompressionStream`, `Blob`), so it runs in the browser as is, and the demo site reads a `File` there. Still open: running the library's own test suite in a real browser, not just Node, to confirm the stream and decompression code behaves the same.
+  The library ships one ES module built on web standards (`Uint8Array`, `ReadableStream`, `DecompressionStream`, `Blob`), so it runs in the browser as is, and the demo site reads a `File` there.
+  Still open: running the library's own test suite in a real browser, not just Node, to confirm the stream and decompression code behaves the same.
 - **String encoding when writing (resolved).**
   A written string cell is embedded inline (`inlineStr`), never added to the shared strings table.
   Shared strings dedupe and match what Excel itself emits, so files are smaller, but the writer would have to hold the whole table to dedupe against it, which fights the single streaming pass, and filling a template would mean rewriting a part we would otherwise copy through untouched.
   Inline strings need no global table, so a sheet writes in one pass and the shared strings part stays byte-identical to the source.
-  The cost is a larger file when the same string repeats. Reading handles both, so nothing downstream cares.
+  The cost is a larger file when the same string repeats.
+  Reading handles both, so nothing downstream cares.
   Offering shared strings as an option later is possible, but it would need the table held in memory and is not worth it until someone asks.
 - **Seekable sources for lower peak memory (resolved).**
   Passing bytes reads the whole input into memory and holds it for the life of the workbook, because a zip is addressed from a directory at its end, so a named part cannot be pulled from a forward only stream.
@@ -357,61 +438,94 @@ This supersedes the table growth rule from decision 14. A table with a totals ro
   Error cells live in a `calcext` extension namespace we do not read, so an errored formula reads as its numeric fallback.
   Shared and nested tables are not resolved, so a shared formula's dependent cell reads with an empty formula text.
   A time cell reads as a string of its raw ISO duration, since the value types have no time.
-  ODF keeps the whole spreadsheet in one `content.xml`, so listing sheets and reading a sheet each scan that part, unlike xlsx's per sheet parts. The list scan runs once at open.
+  ODF keeps the whole spreadsheet in one `content.xml`, so listing sheets and reading a sheet each scan that part, unlike xlsx's per sheet parts.
+  The list scan runs once at open.
 - **`.ods` reading speed (profiled, deferred).**
-  ODF keeps every sheet in one `content.xml` deflate stream, which cannot be seeked, so each access re-decompresses and re-parses from the start. On a 14 MB file that is 359 MB uncompressed: listing sheet names is about 3.2s (the XML reader tokenises cells it then discards, decompression alone is only about 0.5s), and reading a sheet re-parses from the start up to its table, up to 3.4s for the last sheet. Reading every sheet is about 25s, roughly one full parse per sheet.
-  Profiled and left for now. A targeted byte scan for the `<table:table>` tags would cut the name list to about 0.5s, and skipping past earlier sheets would cut a single sheet read, but both trade the XML reader for hand rolled scanning, and reading every sheet at once is not a real use case. The memory story is unaffected and stays bounded. Revisit when a real workload hits it.
+  ODF keeps every sheet in one `content.xml` deflate stream, which cannot be seeked, so each access re-decompresses and re-parses from the start.
+  On a 14 MB file that is 359 MB uncompressed: listing sheet names is about 3.2s (the XML reader tokenises cells it then discards, decompression alone is only about 0.5s), and reading a sheet re-parses from the start up to its table, up to 3.4s for the last sheet.
+  Reading every sheet is about 25s, roughly one full parse per sheet.
+  Profiled and left for now.
+  A targeted byte scan for the `<table:table>` tags would cut the name list to about 0.5s, and skipping past earlier sheets would cut a single sheet read, but both trade the XML reader for hand rolled scanning, and reading every sheet at once is not a real use case.
+  The memory story is unaffected and stays bounded.
+  Revisit when a real workload hits it.
 - **Website presents both formats (resolved).**
-  The site covers `.ods` everywhere it matters now: the hero tagline, the page meta description, the demo copy, and a dedicated `.ods` block in the Benchmark section framed on the memory tradeoff (`ODS_BENCHMARK` in `website/app/site.ts`). The xlsx benchmark is labelled "Reading xlsx" so it reads as one of two scenarios, and the "Fast" feature blurb is scoped to xlsx so it does not contradict the slower `.ods` numbers.
+  The site covers `.ods` everywhere it matters now: the hero tagline, the page meta description, the demo copy, and a dedicated `.ods` block in the Benchmark section framed on the memory tradeoff (`ODS_BENCHMARK` in `website/app/site.ts`).
+  The xlsx benchmark is labelled "Reading xlsx" so it reads as one of two scenarios, and the "Fast" feature blurb is scoped to xlsx so it does not contradict the slower `.ods` numbers.
 - **Formula text is format-specific, and the read side leaks it.**
-  The same formula is `SUM(A1:B1)` in xlsx and `of:=SUM([.A1:.B1])` in ods. That is a namespace prefix, a leading `=` and a different reference syntax, not a punctuation difference.
+  The same formula is `SUM(A1:B1)` in xlsx and `of:=SUM([.A1:.B1])` in ods.
+  That is a namespace prefix, a leading `=` and a different reference syntax, not a punctuation difference.
   Reading hands out each format's text as a plain string, so nothing stops a caller reading an ods formula and writing it into an xlsx as literal nonsense.
-  The writer does not cause this, it makes it reachable. A format-neutral formula needs a parser that rewrites references and maps function names, which is a smaller job than the formula engine but still a real one.
+  The writer does not cause this, it makes it reachable.
+  A format-neutral formula needs a parser that rewrites references and maps function names, which is a smaller job than the formula engine but still a real one.
   `formula()` exists as the boundary where that translation would go.
 - **How faithful is a rewritten part.**
   Untouched entries are copied as bytes and are exactly identical, checksum and compressed size included, so nothing is recompressed.
-  Writing into a table rewrites that table's part even when the table did not change size, because whether to copy an entry or rebuild it is decided before any row has been read and the size is only known afterwards. The result is semantically identical, so this costs byte-identity on one small part and nothing else.
+  Writing into a table rewrites that table's part even when the table did not change size, because whether to copy an entry or rebuild it is decided before any row has been read and the size is only known afterwards.
+  The result is semantically identical, so this costs byte-identity on one small part and nothing else.
   Five parts are rewritten: the edited sheets, `xl/styles.xml`, `xl/workbook.xml`, and, only when there was a calculation chain to drop, `[Content_Types].xml` and `xl/_rels/workbook.xml.rels`.
-  A rewritten part is re-emitted from the XML event stream, which does not carry attribute order, self-closing tag spelling, comments or processing instructions. So it is semantically equivalent but not byte-identical, and the byte-identity test can only cover the parts we did not touch. Whether that gap ever matters is unknown.
+  A rewritten part is re-emitted from the XML event stream, which does not carry attribute order, self-closing tag spelling, comments or processing instructions.
+  So it is semantically equivalent but not byte-identical, and the byte-identity test can only cover the parts we did not touch.
+  Whether that gap ever matters is unknown.
 - **Recalculation and the zip's shape (resolved).**
   Four things we could not prove with a test are no longer guesses, all confirmed on 2026-08-17 in Excel in the browser and in desktop Excel.
   An entry described after its data is accepted, which is what lets a sheet be deflated as it streams rather than buffered.
   A sheet with no `dimension` element is accepted, which a single pass cannot emit correctly because the element precedes the rows it describes.
   `fullCalcOnLoad` makes Excel recompute a cached formula result that our edit made stale.
   And dropping `xl/calcChain.xml` along with its content type override and its relationship leaves nothing dangling.
-  That last one took two passes. The first template had no calculation chain, because `exceljs` writes none even for a workbook with formulas, so the code that removes one never ran. `scripts/manual-check.mjs` now splices one in so the branch is reachable.
-  Desktop Excel is the stricter of the two and agrees. So the design decisions that only Excel could settle are settled, and what remains is coverage rather than doubt: the generated template has no charts or pivot tables, so a real one is still worth a pass. `npm run manual-check` builds the file to try it with.
+  That last one took two passes.
+  The first template had no calculation chain, because `exceljs` writes none even for a workbook with formulas, so the code that removes one never ran.
+  `scripts/manual-check.mjs` now splices one in so the branch is reachable.
+  Desktop Excel is the stricter of the two and agrees.
+  So the design decisions that only Excel could settle are settled, and what remains is coverage rather than doubt: the generated template has no charts or pivot tables, so a real one is still worth a pass.
+  `npm run manual-check` builds the file to try it with.
 - **What a written file does not update.**
   A chart pointing at a fixed range does not extend to cover rows that were written.
-  An Excel Table written by name does now grow, unless it has a totals row. One filled by row number through `writeRows` or `appendRows` still does not, because nothing in that call says the rows belong to it.
+  An Excel Table written by name does now grow, unless it has a totals row.
+  One filled by row number through `writeRows` or `appendRows` still does not, because nothing in that call says the rows belong to it.
   A digitally signed workbook has its signature invalidated by any modification, which is inherent and not fixable.
   A template whose data region sits above a totals block is not served: writing past the region overwrites the totals, and we cannot detect it because we do not know those rows are a totals block.
-  Decision 14 answers this for a template whose data region carries a name, since the name is the author telling us where the region ends. It stays true for one addressed only by coordinates.
+  Decision 14 answers this for a template whose data region carries a name, since the name is the author telling us where the region ends.
+  It stays true for one addressed only by coordinates.
 - **Verifying the writer needs real files (partly done).**
-  In place: the byte-identity test in `test/xlsx/write-fidelity.test.ts` fills a file `exceljs` wrote and asserts every entry we did not rewrite comes out with the same checksum, compressed size and bytes, including the theme and document properties, which we have no reader for at all. `exceljs` and `xlsx` both read the output back. The loop is guarded by naming parts it must have checked, so it cannot pass by checking nothing.
-  Still missing: a real template with charts, pivot tables and conditional formatting. What `exceljs` writes has no part that exercises those, so the most valuable case is still unproven.
-  Excel offering to repair a file is the failure that matters most and no library round-trip catches it. That is a manual check, listed in `MANUAL-CHECKS.md`.
+  In place: the byte-identity test in `test/xlsx/write-fidelity.test.ts` fills a file `exceljs` wrote and asserts every entry we did not rewrite comes out with the same checksum, compressed size and bytes, including the theme and document properties, which we have no reader for at all.
+  `exceljs` and `xlsx` both read the output back.
+  The loop is guarded by naming parts it must have checked, so it cannot pass by checking nothing.
+  Still missing: a real template with charts, pivot tables and conditional formatting.
+  What `exceljs` writes has no part that exercises those, so the most valuable case is still unproven.
+  Excel offering to repair a file is the failure that matters most and no library round-trip catches it.
+  That is a manual check, listed in `MANUAL-CHECKS.md`.
 - **Reading by name (parked).**
   The writer parses defined names anyway, so exposing the resolved names and their extents to a reader is a small surface for free parsing.
   The case that would earn it is an input workbook, a filled-in form whose values live in named cells, where the name survives an author moving the cell and a coordinate does not.
-  Not a priority. A region read is a different shape from the row stream the read API is, and nobody has asked for either.
+  Not a priority.
+  A region read is a different shape from the row stream the read API is, and nobody has asked for either.
 
 - **What a region costs (resolved).**
-  A million rows into a region finishes under a 150MB heap, the same as `appendRows`, where it once needed 500MB. Its rows are counted as they are written rather than beforehand, so nothing is held in proportion to the data.
-  Getting there meant moving the row shifting from a transform ahead of the writer into the writer itself. Four attempts to shrink the holding instead had moved the time from 7.4s to 5.6s and the memory not at all, which was the sign that the holding was the design rather than an inefficiency.
+  A million rows into a region finishes under a 150MB heap, the same as `appendRows`, where it once needed 500MB.
+  Its rows are counted as they are written rather than beforehand, so nothing is held in proportion to the data.
+  Getting there meant moving the row shifting from a transform ahead of the writer into the writer itself.
+  Four attempts to shrink the holding instead had moved the time from 7.4s to 5.6s and the memory not at all, which was the sign that the holding was the design rather than an inefficiency.
   The write benchmark has `region-stream` and `region-load` modes, and `--cap` is the measure worth quoting, since peak RSS counts memory the runtime has not given back.
   What is left is a flat 15MB or so above `appendRows`, the same at fifty thousand rows as at a million, so it is a constant and not something that grows.
   Two shapes still count first, both recorded in decision 15: something above the region reading rows below it, and two regions whose sheets read each other.
 
 - **A grown table's `sortState`.**
-  A table part can hold a `sortState` recording the last sort applied to it, with its own `ref` over the data. We rewrite the table's extent and its autofilter range when it grows, and leave `sortState` as it was.
-  Whether a stale one matters is unknown. It records what was done rather than describing the table, so the likely answer is that Excel ignores it until someone sorts again, but that is reasoning rather than evidence, and growing it wrongly would be worse than leaving it. `exceljs` writes none, so no fixture here has one to look at.
+  A table part can hold a `sortState` recording the last sort applied to it, with its own `ref` over the data.
+  We rewrite the table's extent and its autofilter range when it grows, and leave `sortState` as it was.
+  Whether a stale one matters is unknown.
+  It records what was done rather than describing the table, so the likely answer is that Excel ignores it until someone sorts again, but that is reasoning rather than evidence, and growing it wrongly would be worse than leaving it.
+  `exceljs` writes none, so no fixture here has one to look at.
 
 - **Writing `.ods`.**
-  Deferred, and not decided against. Writing only one of the two formats we read is a real asymmetry and we are not calling it the end state.
+  Deferred, and not decided against.
+  Writing only one of the two formats we read is a real asymmetry and we are not calling it the end state.
   What it costs is now clearer than it was, and the cost went up rather than down.
   It shares the zip and XML writing layers and nothing else, since the fidelity work is per format.
   It forces the formula translation question above, because `formula()` cannot pass its text through untranslated.
-  And the copy-through guarantee is structurally weaker there. In xlsx an edit rewrites the sheet part plus at most four small ones and every other entry is copied byte-identical, which `test/xlsx/write-fidelity.test.ts` asserts. ODF keeps every sheet, every automatic style and every conditional format in one `content.xml`, so editing one cell sends the whole document back through the XML event stream, which as noted above does not carry attribute order, self-closing spelling, comments or processing instructions. The gap that covers a handful of parts in xlsx would cover everything in ods.
-  Decision 13 removes one cost, since there is no styling API to build twice. Decision 14's anchors port, since ODF has named expressions with cell range addresses, spelled `Sheet1.B4:Sheet1.D20` rather than `Sheet1!$B$4:$D$20`.
+  And the copy-through guarantee is structurally weaker there.
+  In xlsx an edit rewrites the sheet part plus at most four small ones and every other entry is copied byte-identical, which `test/xlsx/write-fidelity.test.ts` asserts.
+  ODF keeps every sheet, every automatic style and every conditional format in one `content.xml`, so editing one cell sends the whole document back through the XML event stream, which as noted above does not carry attribute order, self-closing spelling, comments or processing instructions.
+  The gap that covers a handful of parts in xlsx would cover everything in ods.
+  Decision 13 removes one cost, since there is no styling API to build twice.
+  Decision 14's anchors port, since ODF has named expressions with cell range addresses, spelled `Sheet1.B4:Sheet1.D20` rather than `Sheet1!$B$4:$D$20`.
   Revisit once the anchor work has landed for xlsx and we know what the second implementation would actually repeat.

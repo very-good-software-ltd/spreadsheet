@@ -4,3 +4,5 @@ dist/
 
 
 manual-check/
+
+.claude/settings.local.json

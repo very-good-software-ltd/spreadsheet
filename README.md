@@ -26,11 +26,19 @@ So they still include their own stream code, come with a big dependency tree and
 They can't really drop any of that without breaking everyone already using them.
 
 There is also a difference in how we write.
-Both of them read a file into a model and write that model back out, so what they do not understand is not in the model and does not come back. We copy every part we are not editing across as its own bytes, which is why a chart, a pivot table or a macro survives a fill: we never look at it.
+Both of them read a file into a model and write that model back out, so what they do not understand is not in the model and does not come back.
+We copy every part we are not editing across as its own bytes, which is why a chart, a pivot table or a macro survives a fill: we never look at it.
 
-That is also what makes the template model work. You write to a region the template's author named, the region ends up as tall as your data, and the rest of the sheet moves. Every formula that read those rows moves with them, on that sheet and on every other. `exceljs` has `insertRow`, but it shifts values, styles and defined names without touching formulas, so a total over rows 6 to 20 still covers rows 6 to 20 afterwards. We would rather refuse to write a file than write one that looks right and adds up wrong, so where we find something we cannot move, `save` throws and tells you what it is.
+That is also what makes the template model work.
+You write to a region the template's author named, the region ends up as tall as your data, and the rest of the sheet moves.
+Every formula that read those rows moves with them, on that sheet and on every other.
+`exceljs` has `insertRow`, but it shifts values, styles and defined names without touching formulas, so a total over rows 6 to 20 still covers rows 6 to 20 afterwards.
+We would rather refuse to write a file than write one that looks right and adds up wrong, so where we find something we cannot move, `save` throws and tells you what it is.
 
-The upshot is a split worth having. Whoever owns the template does the layout, the formatting and the formulas in Excel, where they can see what they are doing. Your code supplies data. There is no styling API here and there is not going to be one.
+The upshot is a split worth having.
+Whoever owns the template does the layout, the formatting and the formulas in Excel, where they can see what they are doing.
+Your code supplies data.
+There is no styling API here and there is not going to be one.
 
 We have the luxury of being able to skip most of that.
 The library is one codebase on web standards, so the same code reads a file in Node and in the browser.
@@ -293,6 +301,7 @@ Every part of the file you do not edit is copied across byte for byte.
 That means charts, pivot tables, drawings, macros and formatting survive, because we never look at them.
 This is the point of the whole design, and it is why filling a client's template works.
 
+
 ### Filling a template
 
 <!-- example: write-fill-template.ts -->
@@ -323,6 +332,7 @@ await editor.save().pipeTo(Writable.toWeb(createWriteStream("invoice.xlsx")));
 
 The cells you write keep whatever formatting they already had.
 `writeRows` writes over the rows at that position without pushing anything down, which suits a template with a pre-formatted data region waiting to be filled.
+
 
 ### Writing where the template says, not where you guessed
 
@@ -445,6 +455,7 @@ await editor.save().pipeTo(Writable.toWeb(createWriteStream("report.xlsx")));
 
 <!-- /example -->
 
+
 ### What you can put in a cell
 
 A number, a string, a boolean, `null`, `formula(...)`, or `date(...)`.
@@ -473,6 +484,7 @@ So you say which day you mean, and `date` refuses anything that is not one: `dat
 If you already hold a `Date` and want the calendar values it has in UTC, pass `instant.toISOString()`.
 For its local values, pass its parts.
 
+
 ### Big exports stay small in memory
 
 `appendRows` and `writeRows` pull rows as the output drains, not when you hand them over, so a generator streams and nothing is held.
@@ -484,7 +496,8 @@ There is one shape where it cannot.
 Whatever sits above the region goes out before its rows have been counted, so if something up there reads rows below the region, a summary block at the top of the sheet for instance, the rows have to be counted first and are held while that happens.
 Nothing else about the output differs, and you will not notice unless you are writing a great many rows into a template of that shape.
 
-`npm run benchmark:write` prints every path side by side. Add `--cap=150` to see what is actually held, rather than what the runtime has not yet given back to the operating system.
+`npm run benchmark:write` prints every path side by side.
+Add `--cap=150` to see what is actually held, rather than what the runtime has not yet given back to the operating system.
 
 <!-- example: write-large-export.ts -->
 
@@ -520,22 +533,38 @@ Saving twice throws, because your row sources have already been read and the sec
 
 ## What it does not write
 
-- `.ods`. Only `.xlsx` can be written.
-- Moving rows for `writeRows` or `appendRows`. Those write where you say and push nothing around. Rows move only for `writeRegion`, where the region says which rows are the data.
-- Deleting or renaming a sheet. Both ripple into everything that refers to them by name.
+- `.ods`.
+  Only `.xlsx` can be written.
+- Moving rows for `writeRows` or `appendRows`.
+  Those write where you say and push nothing around.
+  Rows move only for `writeRegion`, where the region says which rows are the data.
+- Deleting or renaming a sheet.
+  Both ripple into everything that refers to them by name.
 - Growing a chart's range to cover rows you wrote.
-- Growing an Excel Table you filled by row number, since nothing in that call says the rows belong to it. Address the table by name and it grows.
-- Anything on a sheet whose rows are moving that we cannot move with them. Rather than leave it stale, `save` throws and names it. That means a cell comment below the region, a pivot table reading from it, a formula spanning a range of sheets, a whole row reference, and a sheet carrying an extension list, which is where sparklines and the newer conditional formats live.
+- Growing an Excel Table you filled by row number, since nothing in that call says the rows belong to it.
+  Address the table by name and it grows.
+- Anything on a sheet whose rows are moving that we cannot move with them.
+  Rather than leave it stale, `save` throws and names it.
+  That means a cell comment below the region, a pivot table reading from it, a formula spanning a range of sheets, a whole row reference, and a sheet carrying an extension list, which is where sparklines and the newer conditional formats live.
 
-Charts and images do move. A shape anchored below the region comes down or up with the rows, and one anchored across the region stretches, the same as Excel does when you insert rows by hand. The one case that stops a save is a shape standing only on rows that are going away, since there would be nothing left to hang it from.
-- Keeping a digital signature valid. Any change to a file invalidates it.
-- Files past 4 GB, or with a single part past 4 GB. Those need Zip64, which we do not write, and we throw rather than produce a file no reader will open. This mirrors the read side, which throws on a Zip64 archive. Handling files that large is its own piece of work.
+Charts and images do move.
+A shape anchored below the region comes down or up with the rows, and one anchored across the region stretches, the same as Excel does when you insert rows by hand.
+The one case that stops a save is a shape standing only on rows that are going away, since there would be nothing left to hang it from.
+
+- Keeping a digital signature valid.
+  Any change to a file invalidates it.
+- Files past 4 GB, or with a single part past 4 GB.
+  Those need Zip64, which we do not write, and we throw rather than produce a file no reader will open.
+  This mirrors the read side, which throws on a Zip64 archive.
+  Handling files that large is its own piece of work.
 
 Two things worth knowing about `writeRegion`.
 
-Only one region per worksheet per save. Writing one moves the rows the others were aimed at.
+Only one region per worksheet per save.
+Writing one moves the rows the others were aimed at.
 
-And a template with a summary block above the region reading rows below it is the one shape where the rows have to be counted before the file is written, rather than as it is written. See "Big exports stay small in memory".
+And a template with a summary block above the region reading rows below it is the one shape where the rows have to be counted before the file is written, rather than as it is written.
+See "Big exports stay small in memory".
 
 
 ## Streaming and memory

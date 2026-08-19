@@ -11,8 +11,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- Filling a region no longer holds your rows. A million rows finishes under a 150MB heap, the same as `appendRows`, where it needed 500MB before. Nothing about the output changes.
-  The rows are counted as they are written rather than beforehand. One shape still counts first: a sheet with something above the region that reads rows below it, since that has to go out before the count is known.
+- Filling a region no longer holds your rows.
+  A million rows finishes under a 150MB heap, the same as `appendRows`, where it needed 500MB before.
+  Nothing about the output changes.
+  The rows are counted as they are written rather than beforehand.
+  One shape still counts first: a sheet with something above the region that reads rows below it, since that has to go out before the count is known.
 
 
 ## [0.3.0] - 2026-08-18
@@ -20,19 +23,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - Fill a template by the names its author gave it, with `worksheet.writeRegion("Lines", rows)`.
-  Select a range in Excel, name it in the Name Box, and write to that name. The template can then move under your code without breaking it, which a cell reference cannot survive.
-  The region ends up exactly as tall as the data you give it, and the sheet moves around it. More rows pushes everything below down, fewer pulls it up. This is the model every other templating tool has, and the same thing Insert and Delete do in Excel.
-  Everything pointing at the moved rows moves with them: formulas on that sheet and on every other sheet, merged ranges, conditional formats, data validations, hyperlinks, filters, page breaks, frozen panes, table extents and defined names. A total written `=SUM(C9:C11)` over a three-row region becomes `=SUM(C9:C13)` when five rows arrive, and `=SUM(C9:C9)` when one does.
+  Select a range in Excel, name it in the Name Box, and write to that name.
+  The template can then move under your code without breaking it, which a cell reference cannot survive.
+  The region ends up exactly as tall as the data you give it, and the sheet moves around it.
+  More rows pushes everything below down, fewer pulls it up.
+  This is the model every other templating tool has, and the same thing Insert and Delete do in Excel.
+  Everything pointing at the moved rows moves with them: formulas on that sheet and on every other sheet, merged ranges, conditional formats, data validations, hyperlinks, filters, page breaks, frozen panes, table extents and defined names.
+  A total written `=SUM(C9:C11)` over a three-row region becomes `=SUM(C9:C13)` when five rows arrive, and `=SUM(C9:C9)` when one does.
   No rows at all leaves one empty formatted row, since a region with nothing in it would take every reference to it down with it.
-  Charts and images move with the rows. A shape anchored below the region comes down or up with it, and one anchored across it stretches, matching what Excel does when you insert rows by hand.
+  Charts and images move with the rows.
+  A shape anchored below the region comes down or up with it, and one anchored across it stretches, matching what Excel does when you insert rows by hand.
   Where something on the sheet cannot be moved, `save` throws and names it rather than writing a file that is quietly wrong: a comment below the region, a pivot table reading from it, a formula spanning a range of sheets or naming whole rows, a sheet carrying an extension list, or a shape standing only on rows that are going away.
-  A worksheet sees the names it owns before the workbook-wide ones, matching Excel. `editor.writeRegion` sees only the workbook-wide ones and writes into whichever sheet the name points at.
+  A worksheet sees the names it owns before the workbook-wide ones, matching Excel.
+  `editor.writeRegion` sees only the workbook-wide ones and writes into whichever sheet the name points at.
   A name that cannot be written into says what it is, whether a formula, a print area, a whole column or a reference Excel broke when a sheet was deleted, rather than reporting that the name is missing.
-  Two limits: one region per worksheet per save, and the rows given to a region are read in full before the file is written, so a region is not the place for a million rows. `writeRows` and `appendRows` are unchanged, move nothing, and stay flat in memory.
+  Two limits: one region per worksheet per save, and the rows given to a region are read in full before the file is written, so a region is not the place for a million rows.
+  `writeRows` and `appendRows` are unchanged, move nothing, and stay flat in memory.
   Matching a header row by its text is not something we will do.
 - Address an Excel Table by its name, the same way as a named region.
   `writeRegion("Sales", rows)` writes the rows between the table's header and its totals row, since neither is a place for your data.
-  The table grows or shrinks to fit, extending its own range and its filter, so a total written as `=SUM(Sales[Amount])` keeps covering everything. A totals row is no obstacle: it moves down with everything else.
+  The table grows or shrinks to fit, extending its own range and its filter, so a total written as `=SUM(Sales[Amount])` keeps covering everything.
+  A totals row is no obstacle: it moves down with everything else.
+
 
 ## [0.2.0] - 2026-08-17
 
@@ -48,7 +60,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Write a cell with `worksheet.set("C3", value)`, taking a number, a string, a boolean, `null` to blank it, `formula(...)` or `date(...)`.
   A written cell keeps whatever formatting it already had.
 - Build a date with `date("2026-03-01")` or `date(2026, 3, 1, 14, 30)`, with a month from 1 to 12.
-  A `Date` is not accepted as a cell value on purpose. A cell holds a calendar date with no time zone while a `Date` is an instant, so `new Date(2026, 2, 1)` is local midnight and west of UTC is the last day of February.
+  A `Date` is not accepted as a cell value on purpose.
+  A cell holds a calendar date with no time zone while a `Date` is an instant, so `new Date(2026, 2, 1)` is local midnight and west of UTC is the last day of February.
   `date` also refuses a day that does not exist rather than rolling it over, so `date(2026, 2, 30)` is an error and not the 2nd of March.
 - Write rows with `writeRows(startRow, rows, { inheritFrom })`, or after the last row with `appendRows(rows)`.
   Both take an array, an iterable or an async iterable, and read it only as the output drains, so a generator streams and nothing is held.

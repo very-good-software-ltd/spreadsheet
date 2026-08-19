@@ -95,7 +95,8 @@ They never describe why the abstraction exists or what backs it.
 
 ## Writing things down
 
-Four prose files, each with one job. A fact belongs in exactly one of them.
+Four prose files, each with one job.
+A fact belongs in exactly one of them.
 
 `README.md` is for someone using the library.
 What it does, how to call it, and the limits they will hit.
