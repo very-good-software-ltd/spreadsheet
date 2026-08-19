@@ -14,7 +14,7 @@ export const FEATURES: readonly Feature[] = [
   },
   {
     title: "Fills templates",
-    body: "Open a template, write the cells that change, and every part of the file you didn't touch is copied across byte for byte. Charts, pivot tables and formatting survive, because we never look at them.",
+    body: "Design the report in Excel, where you can see what you're doing, then fill it from code. Three rows or three thousand, and the sheet stays as you designed it: formulas still cover the right cells, charts still point at the right data, and whatever you put below the data is still below it.",
   },
   {
     title: "Node and the browser",

@@ -6,7 +6,7 @@ export function meta() {
     {
       name: "description",
       content:
-        "Read Excel .xlsx and OpenDocument .ods files in Node and the browser without holding the whole sheet in memory, and fill in .xlsx templates without disturbing the rest of the file.",
+        "Read Excel .xlsx and OpenDocument .ods files in Node and the browser without holding the whole sheet in memory. Design a report in Excel and fill it from code with any number of rows, and the rest of the sheet stays as you designed it.",
     },
   ];
 }

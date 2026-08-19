@@ -14,8 +14,8 @@ export function Hero() {
         </h1>
         <p className="mt-5 text-lg text-gray-600 dark:text-gray-300">
           Streams <code className="font-mono">.xlsx</code> and <code className="font-mono">.ods</code> in Node and the
-          browser, and fills in <code className="font-mono">.xlsx</code> templates without disturbing the rest of the
-          file. Pick a file below and watch it read, however big it is.
+          browser. Design your report in Excel, then fill it from code with however many rows you have, and the rest of
+          the sheet stays as you designed it. Pick a file below and watch it read, however big it is.
         </p>
         <div className="mt-8 flex flex-col items-center gap-4">
           <InstallCommand />
