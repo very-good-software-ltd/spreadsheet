@@ -104,3 +104,26 @@ describe("shiftChartReferences", () => {
     );
   });
 });
+
+// A chart built from a named range holds the name rather than the cells. The name
+// moves in the workbook part, so moving it here as well would move it twice.
+describe("shiftChartReferences, on a reference that is not cells", () => {
+  it("leaves a series reading a defined name alone", async () => {
+    const part = await through(INSERT, chartOver("Data!$C$1", "Data!Months", "Data!Amounts"));
+
+    expect(referencesIn(part)).toEqual(["Data!$C$1", "Data!Months", "Data!Amounts"]);
+  });
+
+  it("leaves a series reading another workbook alone", async () => {
+    const part = await through(INSERT, chartOver("Data!$C$1", "[1]Data!$A$2:$A$6", "[1]Data!$C$2:$C$6"));
+
+    expect(referencesIn(part)).toEqual(["Data!$C$1", "[1]Data!$A$2:$A$6", "[1]Data!$C$2:$C$6"]);
+  });
+
+  it("moves a series naming a sheet whose name is quoted", async () => {
+    const shift: RowShift = { sheet: "My Data", at: 6, by: 3 };
+    const part = await through(shift, chartOver("'My Data'!$C$1", "'My Data'!$A$2:$A$6", "'My Data'!$C$2:$C$6"));
+
+    expect(referencesIn(part)).toEqual(["'My Data'!$C$1", "'My Data'!$A$2:$A$9", "'My Data'!$C$2:$C$9"]);
+  });
+});
