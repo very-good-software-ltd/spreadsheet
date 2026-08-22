@@ -13,7 +13,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   A chart reading a region you filled now plots the rows you wrote, rather than the cells they used to sit in.
   This holds wherever the chart is drawn, on the sheet that moved, on another sheet, or on a tab of its own.
   A chart built from a named range needs nothing moved, since the name moves itself.
-  A chart carries its own copy of the values it read, which we do not rewrite, so a reader that plots that copy rather than re-reading the range shows the figures from before your fill.
+  A chart carries its own copy of the values it read, which we do not rewrite.
+  Excel plots from the range instead, so the figures are right on open with nothing to refresh.
+  A reader that plots the copy shows the figures from before your fill.
 
 ### Fixed
 

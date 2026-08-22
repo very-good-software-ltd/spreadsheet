@@ -562,6 +562,7 @@ The one case that stops a save is a shape standing only on rows that are going a
 A chart also moves the range each of its series reads, so a chart over a region you filled plots the rows you wrote rather than the cells they used to sit in.
 That holds wherever the chart is drawn, on the sheet that moved, on another sheet, or on a tab of its own, because a series names the sheet it reads.
 A chart built from a named range needs nothing moved, since the name moves itself.
+A chart also carries its own copy of the values it read, which we do not rewrite, and Excel plots from the range rather than from that copy, so the figures are right on open with nothing to refresh.
 
 Cell comments move too, both the cell they are attached to and the box they appear in.
 A comment on a row that goes away goes with it, which is what Excel does when you delete that row by hand.

@@ -75,13 +75,17 @@ So Excel rebuilds a cache marked `refreshOnLoad`, which was the open question an
 800 against the 1000 the file was saved with says the same thing from the other side.
 No prompt appeared before the refresh, so this is a silent guarantee rather than something a caller has to warn anyone about.
 
-**Not checked yet**, and the next thing to run: chart series ranges, which began moving on 2026-08-22.
-Open `chart-filled.xlsx` and work down its Checks sheet.
+Checked on 2026-08-22, after chart series ranges began moving, on `chart-filled.xlsx`.
+Every expectation on the Checks sheet holds.
+All three charts draw eight bars labelled `Row 1` to `Row 8`, and Select Data reads `Data!$A$1:$C$9`.
 
-Two things turn on it that nothing here can settle.
-Whether Excel accepts a chart part we rewrote rather than copied, which is the same question the VML part answered yes to.
-And whether Excel plots a chart from the range we moved or from the copy of the values the chart carries, which is the same bargain the pivot cache strikes, except that a chart has no `refreshOnLoad` to ask with.
-If it plots the copy, every chart in a filled file shows the figures from before the fill, and moving the ranges bought nothing until someone clicks into the chart.
+So Excel plots a chart from the range rather than from the copy of the values the chart carries, which was the open question.
+`Row 1` to `Row 8` appear nowhere in that copy, which holds only the five rows the template was saved with, so they cannot have been drawn from it.
+That matters because a pivot asks for a rebuild with `refreshOnLoad` and a chart has nothing to ask with, so this rested on behaviour rather than on anything in the file.
+No prompt appeared first, so it is a silent guarantee rather than something a caller has to warn anyone about.
+
+A chart part we rewrote rather than copied is accepted too, the same answer the VML part gave.
+The chart on `Data` came down with the rows and still sits one empty row below Total, the one on `Dashboard` followed although no row on that sheet moved, and the one on its own tab followed although no worksheet points at it.
 
 
 ## Start here

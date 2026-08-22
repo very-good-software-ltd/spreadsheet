@@ -368,6 +368,10 @@ A chart hangs off a drawing, and a drawing off either a worksheet or a chartshee
 So walking out from the sheet that moved would miss a chart drawn anywhere else, and would miss a chart on its own tab entirely.
 A chart is also the only part positioned by row that can read more than one sheet, so it is the only one given more than one move.
 
+A chart carries its own copy of the values each series read, which we do not rewrite, and unlike a pivot cache it has no `refreshOnLoad` to ask for a rebuild with.
+Excel re-reads the range on open regardless, so nothing has to be marked.
+Confirmed by hand in Excel on 2026-08-22.
+
 A cache built from consolidation ranges is refused.
 It reads worksheet ranges of its own, spelled in a shape we do not read, so we cannot tell whether the moved rows are among them and cannot move them if they are.
 That is the one pivot case where refusing is the answer rather than moving, and it costs a file whose ranges were all somewhere else.
@@ -543,12 +547,12 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   Still missing: conditional formatting, which `exceljs` does write but not in a template that exercises the write path.
   Excel offering to repair a file is the failure that matters most and no library round-trip catches it.
   That is a manual check, listed in `MANUAL-CHECKS.md`.
-- **Whether Excel plots a chart from the range or from its own copy of the values (open).**
-  A chart part carries a cached copy of everything each series read, the way a pivot cache does.
-  We move the ranges and leave the copy alone, which is only good enough if Excel re-reads the range on open.
-  A pivot says so with `refreshOnLoad` and a chart has no equivalent to say it with, so this rests on behaviour rather than on anything in the file.
-  If Excel plots the copy, a filled file shows the figures from before the fill until someone clicks into the chart, and moving the ranges bought very little.
-  `chart-filled.xlsx` from `npm run manual-check` answers it: the eight rows it writes carry labels no cached copy in the file has.
+- **Whether Excel plots a chart from the range or from its own copy of the values (resolved).**
+  From the range.
+  A chart part carries a cached copy of everything each series read, the way a pivot cache does, and we move the ranges and leave the copy alone.
+  That is only good enough if Excel re-reads the range on open, and a pivot says so with `refreshOnLoad` while a chart has no equivalent to say it with, so this rested on behaviour rather than on anything in the file.
+  Confirmed by hand in Excel on 2026-08-22: the fill writes eight rows under labels the cached copy does not hold, and all three charts draw them.
+  So a chart needs nothing marked for refresh, which is where this differs from a pivot.
 
 - **Charts in the newer chartex format (open).**
   Treemap, sunburst, histogram, box and whisker, waterfall, funnel and map charts are written to a different part, with its own content type, which `readChartPaths` does not look for.
