@@ -64,6 +64,22 @@ describe("moving rows on one worksheet", () => {
 
     expect(await formulaOn(bytes, "Summary")).toBe("SUM(Elsewhere!A3:A5)");
   });
+
+  // The sheet holding the region is the only one that learns how far the rows went,
+  // and it learns it by writing them. A sheet written before it would wait forever.
+  it("moves a formula on a worksheet the workbook lists first", async () => {
+    const bytes = xlsx(
+      [
+        { name: "Summary", rows: [[{ formula: "SUM(Report!A3:A5)", cached: 0 }]] },
+        { name: "Report", rows: [[], [], [1], [2], [3]] },
+      ],
+      { definedNames: [{ name: "Data", target: "Report!$A$3:$A$5" }] },
+    );
+    const editor = (await Workbook.open(bytes)).edit();
+    editor.worksheet("Report").writeRegion("Data", [[1], [2], [3], [4], [5]]);
+
+    expect(await formulaOn(await bytesOf(editor.save()), "Summary")).toBe("SUM(Report!A3:A7)");
+  });
 });
 
 describe("moving rows on two worksheets in one save", () => {

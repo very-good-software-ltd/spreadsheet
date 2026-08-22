@@ -310,7 +310,10 @@ export class XlsxEditor implements Editor {
     // is written every worksheet is rebuilt rather than copied.
     const moving = [...this.edits.values()].some((edits) => edits.regions.length > 0);
 
-    for (const [index, target] of this.targets.entries()) {
+    // A sheet holding a region goes out before the rest, whatever order the workbook
+    // lists them in. It is the only one that learns how far its rows moved, and it
+    // learns it by writing them, so a sheet written before it would wait forever.
+    for (const [index, target] of this.regionFirst()) {
       const edits = this.edits.get(index);
 
       if (!target.added && !moving && (edits === undefined || !hasEdits(edits))) {
@@ -321,6 +324,12 @@ export class XlsxEditor implements Editor {
     }
 
     return parts;
+  }
+
+  private regionFirst(): readonly (readonly [number, Target])[] {
+    const ordered = [...this.targets.entries()].map(([index, target]) => [index, target] as const);
+
+    return ordered.sort(([left], [right]) => regionRank(this.edits.get(left)) - regionRank(this.edits.get(right)));
   }
 
   // A region is the one edit that moves the rest of the sheet, so its rows are read
@@ -636,6 +645,10 @@ function firstRegion(edits: SheetEdits | undefined, sheet: string): RegionEdit |
 // its rows are only read at save, so the sheet reader knows what to hold on to.
 function inheritedRows(blocks: readonly RowBlock[]): ReadonlySet<number> {
   return new Set(blocks.flatMap((block) => (block.inheritFrom === undefined ? [] : [block.inheritFrom])));
+}
+
+function regionRank(edits: SheetEdits | undefined): number {
+  return (edits?.regions.length ?? 0) > 0 ? 0 : 1;
 }
 
 function hasEdits(edits: SheetEdits): boolean {
