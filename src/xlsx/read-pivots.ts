@@ -19,16 +19,29 @@ const Attribute = {
   Sheet: "sheet",
 } as const;
 
-// The one source type whose data lives in this workbook. The others read a cube, an
-// external query or a scenario, none of which a region can move.
-const FROM_WORKSHEET = "worksheet";
+// The source types the spec allows, mapped to what each one means to us. A
+// worksheet range is one we can follow. Consolidation ranges are several, spelled
+// in a shape we do not read. External and scenario are somewhere else entirely.
+const SOURCE_TYPES: ReadonlyMap<string, PivotSource> = new Map([
+  ["worksheet", "worksheet"],
+  ["consolidation", "consolidation"],
+  ["external", "elsewhere"],
+  ["scenario", "elsewhere"],
+]);
+
+/**
+ * Where a pivot table's cached rows come from, in our terms.
+ *
+ * An unfamiliar source counts as `consolidation`, the answer that refuses, so a
+ * type we have never seen is not quietly assumed to be somewhere we cannot reach.
+ */
+export type PivotSource = "worksheet" | "consolidation" | "elsewhere";
 
 /** Where a pivot table's cached copy of its source data lives, and what it reads. */
 export interface PivotCache {
   readonly path: string;
 
-  /** Whether the cached rows come from a range in this workbook. */
-  readonly fromWorksheet: boolean;
+  readonly source: PivotSource;
 
   /**
    * The worksheet the range is on. Absent when the source is given as a name rather
@@ -70,8 +83,8 @@ async function sourceOf(
   archive: ZipArchive,
   xml: XmlReader,
   path: string,
-): Promise<{ fromWorksheet: boolean; sheet: string | undefined }> {
-  let fromWorksheet = false;
+): Promise<{ source: PivotSource; sheet: string | undefined }> {
+  let source: PivotSource = "consolidation";
   let sheet: string | undefined;
 
   for await (const batch of readPart(archive, xml, path)) {
@@ -80,7 +93,7 @@ async function sourceOf(
         continue;
       }
       if (event.name === Element.CacheSource) {
-        fromWorksheet = event.attributes[Attribute.Type] === FROM_WORKSHEET;
+        source = SOURCE_TYPES.get(event.attributes[Attribute.Type] ?? "") ?? "consolidation";
       }
       if (event.name === Element.WorksheetSource) {
         sheet = event.attributes[Attribute.Sheet];
@@ -88,5 +101,5 @@ async function sourceOf(
     }
   }
 
-  return { fromWorksheet, sheet };
+  return { source, sheet };
 }

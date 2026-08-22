@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import { Workbook } from "../../src/workbook";
 
@@ -21,10 +21,29 @@ async function bytesOf(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> 
 }
 
 async function filledWith(rows: readonly (readonly (string | number)[])[]): Promise<Uint8Array> {
-  const editor = (await Workbook.open(TEMPLATE)).edit();
+  return fill(TEMPLATE, rows);
+}
+
+async function fill(source: Uint8Array, rows: readonly (readonly (string | number)[])[]): Promise<Uint8Array> {
+  const editor = (await Workbook.open(source)).edit();
   editor.writeRegion("Movements", rows);
 
   return bytesOf(editor.save());
+}
+
+// The same workbook with its cache reading consolidation ranges instead of one
+// worksheet range. Only the source type is changed, since the ranges themselves are
+// the shape we do not read and would be inventing.
+function consolidating(): Uint8Array {
+  const files = unzipSync(TEMPLATE);
+  files[CACHE_PART] = strToU8(
+    strFromU8(files[CACHE_PART] ?? new Uint8Array()).replace(
+      '<cacheSource type="worksheet">',
+      '<cacheSource type="consolidation">',
+    ),
+  );
+
+  return zipSync(files);
 }
 
 function partOf(bytes: Uint8Array, path: string): string {
@@ -69,6 +88,12 @@ describe("filling a region a pivot table reads from", () => {
   it("keeps the cached records, which the rebuild replaces", async () => {
     expect(partOf(await filledWith(THREE_ROWS), "xl/pivotCache/pivotCacheRecords1.xml")).toContain(
       "<pivotCacheRecords",
+    );
+  });
+
+  it("refuses a cache built from consolidation ranges", async () => {
+    await expect(fill(consolidating(), THREE_ROWS)).rejects.toThrow(
+      'Cannot write into "Movements": this workbook has a pivot table built from consolidation ranges, whose own ranges we do not read, so we cannot tell whether the moved rows are among them',
     );
   });
 });

@@ -320,7 +320,8 @@ In scope to move: rows and cells, merged ranges, conditional formatting and data
 
 Refused, naming the thing: a formula we cannot rewrite with confidence.
 A shape standing only on rows that are going away, since nothing is left to hang it from and dropping a chart in silence is worse than refusing.
-And rows that take the whole of a pivot's source range with them, since a range attribute has no spelling for a reference pointing nowhere.
+Rows that take the whole of a pivot's source range with them, since a range attribute has no spelling for a reference pointing nowhere.
+And a pivot built from consolidation ranges, whose own ranges are in a shape we do not read.
 
 A drawing counts rows from zero where a sheet counts from one, and an absolute anchor names no row at all and does not move, which matches Excel.
 
@@ -351,9 +352,14 @@ A cache whose source is written as a name rather than as a range needs nothing m
 That case used to pass a save without being noticed at all, because the refusal only ever looked at a range.
 So the blocker was catching the louder half of the problem and letting the quieter half through.
 
-A cache reading anything other than a worksheet, an external query or a cube, is left alone.
+A cache reading an external query or a scenario is left alone.
 Refreshing one of those on open could ask for credentials, which is a worse outcome than a stale figure, and a region cannot have moved its rows anyway.
-The consolidation source, which does read worksheet ranges, is the gap in that reasoning and is an open question below.
+
+A cache built from consolidation ranges is refused.
+It reads worksheet ranges of its own, spelled in a shape we do not read, so we cannot tell whether the moved rows are among them and cannot move them if they are.
+That is the one pivot case where refusing is the answer rather than moving, and it costs a file whose ranges were all somewhere else.
+That is the side to be wrong on, since the alternative is a total that quietly stops adding up.
+A source type we have never seen is treated as consolidation, so an unfamiliar one refuses rather than being assumed harmless.
 
 With that, `blockersFor` had nothing left to report and the module is gone.
 What still stops a save is thrown where the work happens: a formula in `shift-formula`, a shape in `shift-drawing`, an extension list in `shift-sheet`, a pivot source in `shift-pivot`.
@@ -552,11 +558,13 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   This is unit tested and has never been in front of Excel, because the template we have puts the pivot on its own sheet, which is where Excel puts one by default.
   The case is real, a pivot below a data region on one sheet, and worth covering the next time a template is made.
 
-- **A consolidation pivot source.**
-  A cache reading anything other than a worksheet is left alone, on the reasoning that a region cannot have moved its rows.
-  That holds for an external query and for a cube, and not for a consolidation source, which reads worksheet ranges of its own.
-  We do not handle it and do not refuse it, so a consolidation pivot over a moved region goes stale quietly.
-  Left open rather than guessed at: we have no file with one, and inventing the shape of `rangeSet` from memory is the kind of confident wrongness this repo is against.
+- **A consolidation pivot source (resolved by refusing).**
+  A cache reading an external query or a scenario is left alone, on the reasoning that a region cannot have moved its rows.
+  That does not hold for a consolidation source, which reads worksheet ranges of its own.
+  It briefly went stale quietly, which is the failure this whole design exists to avoid, so it refuses now.
+  Refusing needs only the source type, which the spec spells out, where moving it would need the shape of the ranges inside, which we have no file to learn from.
+  So this is settled in the sense that nothing is quietly wrong, and open in the sense that a template with one cannot be filled at all.
+  Moving them is the work to do if anyone hits it, and it starts with a file that has one.
 
 - **A grown table's `sortState`.**
   A table part can hold a `sortState` recording the last sort applied to it, with its own `ref` over the data.

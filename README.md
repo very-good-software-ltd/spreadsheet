@@ -545,7 +545,7 @@ Saving twice throws, because your row sources have already been read and the sec
   Address the table by name and it grows.
 - Anything on a sheet whose rows are moving that we cannot move with them.
   Rather than leave it stale, `save` throws and names it.
-  That means a formula spanning a range of sheets, a whole row reference, a sheet carrying an extension list, which is where sparklines and the newer conditional formats live, and rows that would take the whole of a pivot table's source range with them.
+  That means a formula spanning a range of sheets, a whole row reference, a sheet carrying an extension list, which is where sparklines and the newer conditional formats live, rows that would take the whole of a pivot table's source range with them, and a pivot built from consolidation ranges rather than from one range.
 
 Charts and images do move.
 A shape anchored below the region comes down or up with the rows, and one anchored across the region stretches, the same as Excel does when you insert rows by hand.

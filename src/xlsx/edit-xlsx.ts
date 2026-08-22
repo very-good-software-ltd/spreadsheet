@@ -203,6 +203,8 @@ export class XlsxEditor implements Editor {
     }
     this.saved = true;
 
+    this.refuseUnreachablePivots();
+
     const dateStyles = new DateStyleTable(this.styles);
     const writer = createZipWriter();
     const part = (path: string): AsyncIterable<XmlEvent> => flatten(this.xml.read(this.archive.openStream(path)));
@@ -423,7 +425,7 @@ export class XlsxEditor implements Editor {
       // A cache belongs to the workbook rather than to a sheet, and names the sheet
       // it reads, so it is picked up from whichever sheet is moving.
       for (const cache of this.pivotCaches) {
-        if (cache.fromWorksheet && cache.sheet === name) {
+        if (cache.source === "worksheet" && cache.sheet === name) {
           moving.set(cache.path, {
             sheet: name,
             shift: (events, shift) => withCacheRefreshedOnLoad(shiftPivotSource(events, shift)),
@@ -438,6 +440,22 @@ export class XlsxEditor implements Editor {
   // A cache whose source is written as a name rather than as a range needs no range
   // moved, since the name moves itself, but its copy of the rows is stale all the
   // same. It waits on nothing, so it is rewritten rather than held back.
+  // A cache built from consolidation ranges reads worksheet ranges of its own, in a
+  // shape we do not read, so we cannot tell whether the moved rows are among them.
+  // Refusing costs a file whose ranges were all somewhere else, which is the side to
+  // be wrong on when the alternative is a total that quietly stops adding up.
+  private refuseUnreachablePivots(): void {
+    const region = [...this.edits.values()].flatMap((edits) => edits.regions)[0];
+
+    if (region === undefined || !this.pivotCaches.some((cache) => cache.source === "consolidation")) {
+      return;
+    }
+
+    throw new Error(
+      `Cannot write into "${region.region.name}": this workbook has a pivot table built from consolidation ranges, whose own ranges we do not read, so we cannot tell whether the moved rows are among them`,
+    );
+  }
+
   private staleCaches(): Map<string, () => AsyncIterable<string>> {
     const stale = new Map<string, () => AsyncIterable<string>>();
 
@@ -446,7 +464,7 @@ export class XlsxEditor implements Editor {
     }
 
     for (const cache of this.pivotCaches) {
-      if (cache.fromWorksheet && cache.sheet === undefined) {
+      if (cache.source === "worksheet" && cache.sheet === undefined) {
         const events = (): AsyncIterable<readonly XmlEvent[]> => this.xml.read(this.archive.openStream(cache.path));
         stale.set(cache.path, () => asPart(flatten(withCacheRefreshedOnLoad(events()))));
       }
