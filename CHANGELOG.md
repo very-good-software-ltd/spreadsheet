@@ -26,6 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A region written under a total that reads it no longer repeats the last row.
+  Every row in the region came out carrying the last row's values, so the file looked right and held the wrong data, which is the worst way for this to fail.
+  It happened whenever something above the region referred to a row at or below it, which is a total above the data, and also any sheet Excel saved with the data selected, since the saved selection is a reference too.
+  Check any file you produced that way.
 - Saving no longer hangs when the region is on any worksheet but the first.
   Every other sheet waits to learn how far the rows moved, and only the sheet holding the region learns it, so a sheet the workbook listed ahead of it waited forever.
   A file saved from Excel with the pivot sheet before the data sheet is the ordinary way to hit this.

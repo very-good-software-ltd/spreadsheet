@@ -564,7 +564,7 @@ async function* withRegion(pieces: AsyncIterable<SheetPiece>, plan: SheetWritePl
     above.push(next.value);
   }
 
-  const held = pointsAtOrBelow(above.flatMap(eventsOf), region.firstRow) ? await drain(region.rows) : undefined;
+  const held = pointsAtOrBelow(above.flatMap(eventsOf), region.firstRow) ? await drainRows(region.rows) : undefined;
   let shift = held === undefined ? undefined : region.moveFor(held.length);
 
   if (shift !== undefined) {
@@ -678,11 +678,16 @@ function cellsOf(values: readonly (CellInput | undefined)[]): RowCells {
   return cells;
 }
 
-async function drain<T>(source: AsyncIterable<T>): Promise<T[]> {
-  const held: T[] = [];
+// A region hands the same array out for every row, refilled each time, so holding
+// the rows means copying them. Holding the references would leave every row reading
+// as the last one written.
+async function drainRows(
+  source: AsyncIterable<readonly (CellInput | undefined)[]>,
+): Promise<(readonly (CellInput | undefined)[])[]> {
+  const held: (readonly (CellInput | undefined)[])[] = [];
 
-  for await (const item of source) {
-    held.push(item);
+  for await (const values of source) {
+    held.push([...values]);
   }
 
   return held;

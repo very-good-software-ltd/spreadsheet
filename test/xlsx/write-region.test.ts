@@ -56,6 +56,62 @@ async function filledWith(write: (worksheet: ReturnType<Workbook["edit"]>) => vo
   return cellsOf(await bytesOf(editor.save()));
 }
 
+// The same region, with a total above it that reads the rows below it. That total
+// cannot be written until the rows have been counted, so the writer counts them
+// first and holds them, which is a different path through the region writer.
+function templateWithTotalAbove() {
+  return xlsx(
+    [
+      {
+        name: "Report",
+        rows: [
+          [{ formula: "SUM(B4:B6)", cached: 0 }],
+          [],
+          [],
+          ["left", "x", "y", "z", "right"],
+          ["left", "x", "y", "z", "right"],
+          ["left", "x", "y", "z", "right"],
+        ],
+      },
+    ],
+    { definedNames: [{ name: "Data", target: "Report!$B$4:$D$6" }] },
+  );
+}
+
+async function filledUnderATotal(rows: readonly (readonly (string | number)[])[]) {
+  const editor = (await Workbook.open(templateWithTotalAbove())).edit();
+  editor.worksheet("Report").writeRegion("Data", rows);
+
+  return cellsOf(await bytesOf(editor.save()));
+}
+
+describe("writing into a named region under a total that reads it", () => {
+  it("gives each row its own values", async () => {
+    const rows = await filledUnderATotal([
+      ["North", "January", 1],
+      ["South", "February", 2],
+      ["East", "March", 3],
+    ]);
+
+    expect(rows.slice(3, 6)).toEqual([
+      ["left", "North", "January", 1, "right"],
+      ["left", "South", "February", 2, "right"],
+      ["left", "East", "March", 3, "right"],
+    ]);
+  });
+
+  it("gives each row its own values when the region grows", async () => {
+    const rows = await filledUnderATotal([
+      ["a", "b", 1],
+      ["c", "d", 2],
+      ["e", "f", 3],
+      ["g", "h", 4],
+    ]);
+
+    expect(rows.slice(3, 7).map((row) => row[1])).toEqual(["a", "c", "e", "g"]);
+  });
+});
+
 describe("writing into a named region", () => {
   it("writes rows from the region's first row and first column", async () => {
     const rows = await filledWith((editor) =>
