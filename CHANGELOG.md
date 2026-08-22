@@ -7,6 +7,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- A formula reading a range in another workbook is left alone, as it was always meant to be.
+  The end of the range was moved as though it named a cell on the sheet you filled, so `[1]Sheet1!$C$9:$C$11` came back reading three more rows than it should.
+  A single cell was never affected, only a range, and only one written without quotes around the file and sheet, which is how Excel writes it when the sheet name needs none.
+
+
 ## [0.4.0] - 2026-08-22
 
 ### Changed

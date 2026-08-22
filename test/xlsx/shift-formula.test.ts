@@ -104,6 +104,20 @@ describe("shiftFormula on things that only look like references", () => {
   it("leaves a reference into another workbook alone", () => {
     expect(shifted("[1]Sheet1!C12")).toBe("[1]Sheet1!C12");
   });
+
+  // The far end of a range is where this goes wrong if the whole reference is not
+  // taken in one go, since on its own it reads as a reference on this sheet.
+  it("leaves a range into another workbook alone", () => {
+    expect(shifted("SUM([1]Sheet1!$C$9:$C$11)")).toBe("SUM([1]Sheet1!$C$9:$C$11)");
+  });
+
+  it("still moves a reference on this sheet after one into another workbook", () => {
+    expect(shifted("SUM([1]Sheet1!$C$9:$C$11,C9:C11)")).toBe("SUM([1]Sheet1!$C$9:$C$11,C9:C13)");
+  });
+
+  it("leaves a range into another workbook whose name is quoted alone", () => {
+    expect(shifted("SUM('[book.xlsx]Sheet1'!$C$9:$C$11)")).toBe("SUM('[book.xlsx]Sheet1'!$C$9:$C$11)");
+  });
 });
 
 describe("shiftFormula on what it will not touch", () => {

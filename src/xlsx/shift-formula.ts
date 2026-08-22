@@ -58,6 +58,17 @@ export function shiftFormula(text: string, shift: RowShift, onSheet: string): st
       const stop = end < 0 ? text.length : end + 1;
       result += text.slice(position, stop);
       position = stop;
+
+      // The reference the bracket introduces belongs to another workbook, so it is
+      // taken whole. Copying only the bracket leaves the scan standing inside the
+      // reference, where the far end of a range reads as one on this sheet.
+      REFERENCE.lastIndex = position;
+      const match = REFERENCE.exec(text);
+      if (match !== null) {
+        result += match[0];
+        position = REFERENCE.lastIndex;
+      }
+
       continue;
     }
 
