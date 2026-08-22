@@ -443,7 +443,7 @@ const CHART_EXPECTATIONS = [
   ],
   [
     "Any of the three charts",
-    "Click the chart, open the Chart Design tab that appears, click Select Data, click Amount in the left-hand list, click Edit. Series values should read =Data!$C$2:$C$9. Press Cancel, then Cancel again",
+    "Click the chart, open the Chart Design tab that appears, click Select Data. The Chart data range box at the top should read =Data!$A$1:$C$9, where the template had =Data!$A$1:$C$6. Press Cancel",
     "The only check that reads the reference we wrote rather than inferring it from what the chart drew. Older Excel puts Select Data under the Design or Chart Design tab, and if you cannot find it, skip this row, since the Row 1 labels cover the same ground",
   ],
 ];
