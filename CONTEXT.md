@@ -316,21 +316,26 @@ The conclusion changes because there is a third option we did not consider: do t
 So a save either produces a correct file or throws naming what stopped it.
 Never a file that is quietly wrong.
 
-In scope to move: rows and cells, merged ranges, conditional formatting and data validation ranges, hyperlinks, autofilter, frozen panes, row breaks, table extents, defined names, formula references on the sheet and on every other sheet pointing at it, and the anchors a drawing places its shapes by.
+In scope to move: rows and cells, merged ranges, conditional formatting and data validation ranges, hyperlinks, autofilter, frozen panes, row breaks, table extents, defined names, formula references on the sheet and on every other sheet pointing at it, the anchors a drawing places its shapes by, and the cell each comment belongs to along with the box it appears in.
 
 Refused, naming the thing: a pivot table whose source covers the region.
-A comment below it.
 A formula we cannot rewrite with confidence.
 And a shape standing only on rows that are going away, since nothing is left to hang it from and dropping a chart in silence is worse than refusing.
 
 A drawing counts rows from zero where a sheet counts from one, and an absolute anchor names no row at all and does not move, which matches Excel.
 
-Comments stay refused for a reason of their own.
-A comment carries a reference in one part and its position in a second, written in VML, a legacy format we have no reader for.
-Moving the reference alone would leave the box it appears in behind.
-
 Changed: drawings were refused in the first version, deliberately, so that something worked before the hardest part was attempted.
 They move now.
+
+Changed: comments were refused too, for a reason of their own.
+A comment says which cell it belongs to in one part, and the box it appears in is positioned by a second written in VML, a legacy format we had no reader for, so moving the cell alone would have left the box behind.
+Both parts move now, under one rule, and VML counts rows from zero the way a drawing does.
+A comment whose cell went away is dropped, text and all, because that is what Excel does when a row carrying one is deleted.
+That is the one place a comment parts company with a shape, which closes up against the rows that went rather than going with them.
+The same VML part carries any form control and any header or footer image the sheet has, so those move on the same pass.
+
+No library we test against reads a comment back, `exceljs` not even from its own file, so SheetJS is what proves the moved comment survives.
+Whether Excel accepts a VML part we rewrote is a manual check, since the rewrite loses self-closing tag spelling the way every other rewritten part does.
 
 A region shrinks to one row and no further.
 A range whose every endpoint is deleted becomes `#REF!` in Excel, so one surviving row is what keeps a total written over the region alive, and it costs one blank formatted row on a run with no data at all.
@@ -360,7 +365,8 @@ The one thing that has to be learned is how far the rows moved, and it is learne
           the region's rows              being counted here
           everything below the region    yes
    2    every other sheet                yes
-   3    the drawings of the moved sheet  yes
+   3    the moved sheet's drawings,
+        comments and VML                 yes
    4    the workbook part, for its names yes
    5    a grown table's part             yes
    6    the styles part                  no move involved
@@ -462,7 +468,8 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   Untouched entries are copied as bytes and are exactly identical, checksum and compressed size included, so nothing is recompressed.
   Writing into a table rewrites that table's part even when the table did not change size, because whether to copy an entry or rebuild it is decided before any row has been read and the size is only known afterwards.
   The result is semantically identical, so this costs byte-identity on one small part and nothing else.
-  Five parts are rewritten: the edited sheets, `xl/styles.xml`, `xl/workbook.xml`, and, only when there was a calculation chain to drop, `[Content_Types].xml` and `xl/_rels/workbook.xml.rels`.
+  Five parts are rewritten on any edit: the edited sheets, `xl/styles.xml`, `xl/workbook.xml`, and, only when there was a calculation chain to drop, `[Content_Types].xml` and `xl/_rels/workbook.xml.rels`.
+  Writing into a region adds the moved sheet's drawings, its comments and the VML positioning them, because everything positioned by row has to move with the rows.
   A rewritten part is re-emitted from the XML event stream, which does not carry attribute order, self-closing tag spelling, comments or processing instructions.
   So it is semantically equivalent but not byte-identical, and the byte-identity test can only cover the parts we did not touch.
   Whether that gap ever matters is unknown.

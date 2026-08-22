@@ -10,14 +10,17 @@ import type { ZipArchive } from "../zip/zip-archive";
 import { MAIN_NAMESPACE } from "./blank-workbook";
 import { type CellEdit, mergeRowEdits, type RowBlock } from "./merge-row-edits";
 import { blockersFor } from "./movement-blockers";
+import type { CommentParts } from "./read-comments";
 import type { Styles } from "./read-styles";
 import type { TableOnSheet } from "./read-tables";
 import type { WorkbookInfo } from "./read-workbook";
 import { shiftFor } from "./region-shift";
 import { type NamedThings, resolveRegion } from "./resolve-region";
+import { shiftCommentRefs } from "./shift-comment";
 import { shiftDrawingAnchors } from "./shift-drawing";
 import type { RowShift } from "./shift-formula";
 import { shiftForeignFormulas } from "./shift-sheet";
+import { shiftVmlAnchors } from "./shift-vml";
 import {
   type AddedWorksheet,
   asPart,
@@ -88,6 +91,12 @@ interface Target {
   readonly added: boolean;
 }
 
+/** A part positioned by row, and how to move it once its worksheet has moved. */
+interface AnchoredPart {
+  readonly sheet: string;
+  readonly shift: (events: AsyncIterable<readonly XmlEvent[]>, shift: RowShift) => AsyncIterable<readonly XmlEvent[]>;
+}
+
 export class XlsxEditor implements Editor {
   private readonly targets: Target[];
   private readonly edits = new Map<number, SheetEdits>();
@@ -110,6 +119,7 @@ export class XlsxEditor implements Editor {
     private readonly styles: Styles,
     private readonly tables: readonly TableOnSheet[] = [],
     private readonly drawings: ReadonlyMap<string, readonly string[]> = new Map(),
+    private readonly comments: ReadonlyMap<string, CommentParts> = new Map(),
   ) {
     this.targets = workbook.worksheets.map((sheet) => ({ name: sheet.name, path: sheet.path, added: false }));
     this.takenRelationshipIds = new Set(workbook.relationshipIds);
@@ -196,7 +206,7 @@ export class XlsxEditor implements Editor {
 
     const rewritten = this.packageParts(part);
     const sheets = this.sheetParts(dateStyles);
-    const movingDrawings = this.movingDrawings();
+    const anchored = this.anchoredParts();
 
     for (const entry of this.archive.entries()) {
       if (
@@ -205,7 +215,7 @@ export class XlsxEditor implements Editor {
         sheets.has(entry.path) ||
         entry.path === CALCULATION_CHAIN_PART ||
         this.growing.has(entry.path) ||
-        movingDrawings.has(entry.path)
+        anchored.has(entry.path)
       ) {
         continue;
       }
@@ -222,12 +232,12 @@ export class XlsxEditor implements Editor {
       writer.add(path, encoded(content));
     }
 
-    // A moved sheet's drawings are declared after it, because how far its rows moved
-    // is only known once they have gone past.
-    for (const [path, sheet] of movingDrawings) {
+    // Everything a moved sheet positions by row is declared after it, because how
+    // far its rows moved is only known once they have gone past.
+    for (const [path, moving] of anchored) {
       writer.add(
         path,
-        encoded(() => this.drawingPart(path, sheet)),
+        encoded(() => this.anchoredPart(path, moving)),
       );
     }
 
@@ -371,11 +381,11 @@ export class XlsxEditor implements Editor {
     };
   }
 
-  // Which drawing parts belong to a worksheet a region is being written into. That a
-  // region was written is known before any row is read, which is when the choice to
-  // copy an entry or rebuild it has to be made.
-  private movingDrawings(): Map<string, string> {
-    const moving = new Map<string, string>();
+  // Which parts positioned by row belong to a worksheet a region is being written
+  // into. That a region was written is known before any row is read, which is when
+  // the choice to copy an entry or rebuild it has to be made.
+  private anchoredParts(): Map<string, AnchoredPart> {
+    const moving = new Map<string, AnchoredPart>();
 
     for (const [index, edits] of this.edits) {
       const name = this.targets[index]?.name;
@@ -383,19 +393,27 @@ export class XlsxEditor implements Editor {
         continue;
       }
 
+      const comments = this.comments.get(name);
+
       for (const path of this.drawings.get(name) ?? []) {
-        moving.set(path, name);
+        moving.set(path, { sheet: name, shift: shiftDrawingAnchors });
+      }
+      for (const path of comments?.comments ?? []) {
+        moving.set(path, { sheet: name, shift: shiftCommentRefs });
+      }
+      for (const path of comments?.vml ?? []) {
+        moving.set(path, { sheet: name, shift: shiftVmlAnchors });
       }
     }
 
     return moving;
   }
 
-  private async *drawingPart(path: string, sheet: string): AsyncIterable<string> {
-    const shift = await (await this.regions()).find((region) => region.sheet === sheet)?.shift;
+  private async *anchoredPart(path: string, moving: AnchoredPart): AsyncIterable<string> {
+    const shift = await (await this.regions()).find((region) => region.sheet === moving.sheet)?.shift;
     const events = this.xml.read(this.archive.openStream(path));
 
-    yield* asPart(flatten(shift === undefined ? events : shiftDrawingAnchors(events, shift)));
+    yield* asPart(flatten(shift === undefined ? events : moving.shift(events, shift)));
   }
 
   // Asked before the rows are counted, so the row the move starts at is not known
@@ -403,11 +421,7 @@ export class XlsxEditor implements Editor {
   // little more than it has to rather than a little less.
   private async refuseIfBlocked(target: Target, prepared: PreparedRegion): Promise<void> {
     const at = prepared.region.firstRow;
-    const blockers = await blockersFor(this.archive, this.xml, target.path, target.name, {
-      sheet: prepared.sheet,
-      at,
-      by: 0,
-    });
+    const blockers = await blockersFor(this.archive, this.xml, target.name, { sheet: prepared.sheet, at, by: 0 });
 
     if (blockers.length > 0) {
       throw new Error(

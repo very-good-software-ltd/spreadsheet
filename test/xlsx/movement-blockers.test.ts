@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
-import { strFromU8, unzipSync } from "fflate";
+import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
 import { describe, expect, it } from "vitest";
+import * as SheetJS from "xlsx";
 import { Workbook } from "../../src/workbook";
 
 // A one pixel PNG, so a drawing part exists without the test carrying an image.
@@ -28,10 +29,46 @@ async function templateWith(decorate: (workbook: ExcelJS.Workbook, sheet: ExcelJ
   return new Uint8Array(await source.xlsx.writeBuffer());
 }
 
+const PIVOT_CACHE_PART = "xl/pivotCache/pivotCacheDefinition1.xml";
+const PIVOT_CACHE_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition";
+
+// No fixture library writes a pivot table, and only the cached source range is
+// what stops a move, so the smallest thing that carries one is spliced in.
+function withPivotOver(bytes: Uint8Array, sheet: string, extent: string): Uint8Array {
+  const files = unzipSync(bytes);
+  const relationships = strFromU8(files["xl/_rels/workbook.xml.rels"] ?? new Uint8Array());
+
+  files[PIVOT_CACHE_PART] = strToU8(
+    `<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cacheSource type="worksheet"><worksheetSource sheet="${sheet}" ref="${extent}"/></cacheSource></pivotCacheDefinition>`,
+  );
+  files["xl/_rels/workbook.xml.rels"] = strToU8(
+    relationships.replace(
+      "</Relationships>",
+      `<Relationship Id="rIdPivot" Type="${PIVOT_CACHE_TYPE}" Target="pivotCache/pivotCacheDefinition1.xml"/></Relationships>`,
+    ),
+  );
+
+  return zipSync(files);
+}
+
 function anchorRowsIn(bytes: Uint8Array): (string | undefined)[] {
   const drawing = strFromU8(unzipSync(bytes)["xl/drawings/drawing1.xml"] ?? new Uint8Array());
 
   return [...drawing.matchAll(/<xdr:row>(\d+)<\/xdr:row>/g)].map((match) => match[1]);
+}
+
+function commentRefsIn(bytes: Uint8Array): (string | undefined)[] {
+  const comments = strFromU8(unzipSync(bytes)["xl/comments1.xml"] ?? new Uint8Array());
+
+  return [...comments.matchAll(/<comment ref="([^"]+)"/g)].map((match) => match[1]);
+}
+
+// The cell a comment's box hangs from, read back as a sheet row, where the VML
+// counts from zero.
+function commentCellRowsIn(bytes: Uint8Array): number[] {
+  const vml = strFromU8(unzipSync(bytes)["xl/drawings/vmlDrawing1.vml"] ?? new Uint8Array());
+
+  return [...vml.matchAll(/<x:Row>(\d+)<\/x:Row>/g)].map((match) => Number(match[1]) + 1);
 }
 
 async function writeThreeRowsInto(bytes: Uint8Array) {
@@ -68,20 +105,59 @@ describe("what stops a worksheet's rows moving", () => {
     expect(anchorRowsIn(await writeThreeRowsInto(bytes))).toEqual(["0", "2"]);
   });
 
-  it("refuses when a comment sits where the rows would move", async () => {
+  it("moves a comment below the rows that move, rather than refusing", async () => {
     const bytes = await templateWith((_workbook, sheet) => {
       sheet.getCell("B7").note = "check this";
     });
 
+    expect(commentRefsIn(await writeThreeRowsInto(bytes))).toEqual(["B8"]);
+  });
+
+  it("moves the box the comment is drawn in with it", async () => {
+    const bytes = await templateWith((_workbook, sheet) => {
+      sheet.getCell("B7").note = "check this";
+    });
+
+    expect(commentCellRowsIn(await writeThreeRowsInto(bytes))).toEqual([8]);
+  });
+
+  // exceljs reads no comment back, from its own file or from ours, so that the
+  // whole comment survived the move is proved by a third library instead.
+  it("SheetJS reads the moved comment where it ended up", async () => {
+    const bytes = await templateWith((_workbook, sheet) => {
+      sheet.getCell("B7").note = "check this";
+    });
+
+    const report = SheetJS.read(await writeThreeRowsInto(bytes), { type: "array" }).Sheets["Report"];
+
+    expect(report?.["B8"]?.c?.[0]?.t).toBe("check this");
+    expect(report?.["B7"]?.c).toBeUndefined();
+  });
+
+  it("leaves a comment above the rows that move where it is", async () => {
+    const bytes = await templateWith((_workbook, sheet) => {
+      sheet.getCell("B1").note = "check this";
+    });
+
+    expect(commentRefsIn(await writeThreeRowsInto(bytes))).toEqual(["B1"]);
+  });
+
+  it("refuses when a pivot table reads from where the rows would move", async () => {
+    const bytes = withPivotOver(await templateWith(() => {}), "Report", "B3:B5");
+
     await expect(writeThreeRowsInto(bytes)).rejects.toThrow(
-      "that sheet has a cell comment at or below row 3, which is positioned by a drawing of its own",
+      "that sheet has a pivot table reading from row 3 or below, whose cached source range we do not rewrite",
     );
   });
 
+  it("leaves a pivot table reading from above the rows alone", async () => {
+    const bytes = withPivotOver(await templateWith(() => {}), "Report", "B1:B2");
+
+    await expect(writeThreeRowsInto(bytes)).resolves.toBeInstanceOf(Uint8Array);
+  });
+
   it("names the region and the row the move starts at", async () => {
-    const bytes = await templateWith((_workbook, sheet) => {
-      sheet.getCell("B7").note = "check this";
-    });
+    const bytes = withPivotOver(await templateWith(() => {}), "Report", "B3:B5");
 
     await expect(writeThreeRowsInto(bytes)).rejects.toThrow(
       'Cannot write into "Data": it moves the rows of worksheet "Report" from row 3',

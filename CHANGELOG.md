@@ -7,6 +7,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Changed
+
+- Cell comments move with the rows instead of stopping the save.
+  A comment below the region comes down or up with it, and both halves move, the cell it is attached to and the box it appears in.
+  A comment on a row that goes away goes with it, text and all, the same as deleting that row in Excel.
+  Form controls and header or footer images share the part the boxes live in, so they move on the same pass.
+  A pivot table reading from the region is now the only thing on the sheet itself that still stops a save.
+
+
 ## [0.3.1] - 2026-08-19
 
 ### Changed

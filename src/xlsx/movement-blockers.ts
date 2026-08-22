@@ -5,13 +5,11 @@ import { readRelationships } from "./read-relationships";
 import type { RowShift } from "./shift-formula";
 
 const RELATIONSHIPS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-const COMMENTS = `${RELATIONSHIPS}/comments`;
 const PIVOT_CACHE = `${RELATIONSHIPS}/pivotCacheDefinition`;
 
 const WORKBOOK_PART = "xl/workbook.xml";
 
 const Element = {
-  Comment: "comment",
   PivotSource: "worksheetSource",
 } as const;
 
@@ -21,7 +19,7 @@ const Attribute = {
 } as const;
 
 /**
- * Everything on the worksheet at `sheetPath` that sits where `shift` would move
+ * Everything on the worksheet named `sheetName` that sits where `shift` would move
  * rows and that we cannot move with it, each described so a caller can say which.
  *
  * Empty when the sheet can be moved, which is the ordinary case for a template of
@@ -30,43 +28,16 @@ const Attribute = {
 export async function blockersFor(
   archive: ZipArchive,
   xml: XmlReader,
-  sheetPath: string,
   sheetName: string,
   shift: RowShift,
 ): Promise<readonly string[]> {
   const blockers: string[] = [];
-
-  for (const relationship of await readRelationships(archive, xml, sheetPath)) {
-    if (!archive.has(relationship.target)) {
-      continue;
-    }
-
-    if (relationship.type === COMMENTS && (await commentReaches(archive, xml, relationship.target, shift.at))) {
-      blockers.push(`a cell comment at or below row ${shift.at}, which is positioned by a drawing of its own`);
-    }
-  }
 
   if (await pivotReaches(archive, xml, sheetName, shift.at)) {
     blockers.push(`a pivot table reading from row ${shift.at} or below, whose cached source range we do not rewrite`);
   }
 
   return blockers;
-}
-
-async function commentReaches(archive: ZipArchive, xml: XmlReader, path: string, row: number): Promise<boolean> {
-  for await (const batch of readPart(archive, xml, path)) {
-    for (const event of batch) {
-      if (
-        event.type === "open" &&
-        event.name === Element.Comment &&
-        rowOf(event.attributes[Attribute.Reference]) >= row
-      ) {
-        return true;
-      }
-    }
-  }
-
-  return false;
 }
 
 // A pivot cache belongs to the workbook rather than to a sheet, and names the sheet

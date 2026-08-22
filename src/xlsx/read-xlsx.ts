@@ -6,6 +6,7 @@ import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
 import { XlsxEditor } from "./edit-xlsx";
 import type { CellContext } from "./interpret-cell";
+import { type CommentParts, readCommentParts } from "./read-comments";
 import { readDrawingPaths } from "./read-drawings";
 import { readSharedStrings } from "./read-shared-strings";
 import { readSheetRows } from "./read-sheet";
@@ -22,15 +23,17 @@ export async function readXlsx(archive: ZipArchive): Promise<WorkbookData> {
   const context: CellContext = { sharedStrings, styles, date1904 };
   const tables = await readAllTables(archive, xml, refs);
   const drawings = new Map<string, readonly string[]>();
+  const comments = new Map<string, CommentParts>();
   for (const ref of refs) {
     drawings.set(ref.name, await readDrawingPaths(archive, xml, ref.path));
+    comments.set(ref.name, await readCommentParts(archive, xml, ref.path));
   }
   const worksheets: readonly WorksheetInfo[] = refs.map((ref) => ({ name: ref.name, hidden: ref.hidden }));
 
   return {
     worksheets,
     edit(): Editor {
-      return new XlsxEditor(archive, info, styles, tables, drawings);
+      return new XlsxEditor(archive, info, styles, tables, drawings, comments);
     },
     openRows(index: number): AsyncIterable<Row> {
       const ref = refs[index];
