@@ -4,8 +4,11 @@
 // you should see.
 //
 // Drop your own file at manual-check/template.xlsx and it is used instead of the
-// generated one. Do that for the checks nothing here can cover, charts and pivot
-// tables, which exceljs cannot write.
+// generated one. Do that for the check nothing here can cover, a real chart, which
+// exceljs cannot write.
+//
+// It also fills the pivot template kept with the tests, giving a second file to
+// open on the same run, since a pivot table cannot be generated either.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ExcelJS from "exceljs";
@@ -15,6 +18,11 @@ import { date, Workbook } from "../dist/index.js";
 const OUTPUT_DIR = "manual-check";
 const TEMPLATE = join(OUTPUT_DIR, "template.xlsx");
 const FILLED = join(OUTPUT_DIR, "filled.xlsx");
+
+// A pivot table cannot be generated, since exceljs cannot write one, so the pivot
+// check runs off a file saved from Excel and kept with the tests.
+const PIVOT_TEMPLATE = join("test", "fixtures", "pivot-template.xlsx");
+const PIVOT_FILLED = join(OUTPUT_DIR, "pivot-filled.xlsx");
 
 const MAIN_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const SPREADSHEET_TYPES = "application/vnd.openxmlformats-officedocument.spreadsheetml";
@@ -337,6 +345,50 @@ async function fill(source) {
   return editor.save();
 }
 
+// The pivot template holds five rows over three regions. Eight rows arrive, one of
+// them for a region the cache has never seen, so West appearing in the summary is
+// Excel having rebuilt the cache rather than redrawn the old one.
+const PIVOT_ROWS = [
+  ["North", "January", 100],
+  ["North", "February", 100],
+  ["South", "January", 100],
+  ["South", "February", 100],
+  ["East", "January", 100],
+  ["East", "February", 100],
+  ["West", "January", 100],
+  ["West", "February", 100],
+];
+
+const PIVOT_EXPECTATIONS = [
+  ["Where", "What you should see", "Why it matters"],
+  ["The file itself", "Opens with no repair prompt", "A rewritten pivot cache is accepted"],
+  ["Data rows 2 to 9", "Eight rows, the three that were there replaced", "The region took the rows it was given"],
+  [
+    "The Pivot sheet",
+    "Four regions listed, East, North, South and West",
+    "West is in none of the cached rows, so seeing it means Excel rebuilt the cache from the range rather than redrawing what it had",
+  ],
+  [
+    "The Pivot sheet's grand total",
+    "Reads 800, not 1000",
+    "1000 is the total of the rows the file was saved with, so that figure means the cache was not rebuilt",
+  ],
+  [
+    "PivotTable Analyze, Change Data Source",
+    "Reads Data!$A$1:$C$9",
+    "The cached source range grew with the rows rather than stopping where it did",
+  ],
+];
+
+async function fillPivot(source) {
+  const editor = (await Workbook.open(source)).edit();
+
+  editor.writeRegion("Movements", PIVOT_ROWS);
+  editor.addWorksheet("Checks").appendRows(PIVOT_EXPECTATIONS);
+
+  return editor.save();
+}
+
 async function collect(stream) {
   const chunks = [];
   const reader = stream.getReader();
@@ -361,13 +413,15 @@ if (!provided) {
 
 const source = readFileSync(TEMPLATE);
 writeFileSync(FILLED, await collect(await fill(source)));
+writeFileSync(PIVOT_FILLED, await collect(await fillPivot(readFileSync(PIVOT_TEMPLATE))));
 
 console.log(`template: ${TEMPLATE}${provided ? " (yours)" : " (generated)"}`);
 console.log(`filled:   ${FILLED}`);
+console.log(`pivot:    ${PIVOT_FILLED} (from ${PIVOT_TEMPLATE})`);
 console.log();
-console.log("Open the filled file in Excel and work down its Checks sheet.");
+console.log("Open both filled files in Excel and work down each one's Checks sheet.");
 if (!provided) {
   console.log();
-  console.log("Charts and pivot tables are not covered: exceljs cannot write them.");
-  console.log(`For those, put a real template at ${TEMPLATE} and run this again.`);
+  console.log("Charts are not covered: exceljs cannot write one, so the picture stands in for it.");
+  console.log(`For a real chart, put a template at ${TEMPLATE} and run this again.`);
 }
