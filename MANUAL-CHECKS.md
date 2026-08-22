@@ -59,8 +59,12 @@ Checked on 2026-08-18, after tables landed.
 A structured reference resolves over the table's extent and nothing else, so that number is Excel agreeing the table grew, not just that the rows are on the sheet.
 Growing a table's extent and its filter's is therefore confirmed.
 
-Not checked yet: comments moving.
-That landed after the last pass, so the three comments on `Summary` have never been in front of Excel, and the VML part positioning them has never been rewritten by us and opened.
+Checked on 2026-08-22, after comments could move.
+The file opens with no repair prompt and `Summary` shows the two comments that should be there, at `A1` where it stayed and at `A5` where the template had it at `A7`.
+The one on the row the region took out is gone.
+
+So a VML part we rewrote rather than copied is accepted, which was the open question.
+Excel does not mind losing self-closing tag spelling there any more than it does anywhere else, and the two parts a comment is written across came out agreeing with each other.
 
 What is still worth a pass before a release is a real template, since the generated one has no charts or pivot tables in it.
 
@@ -202,6 +206,7 @@ There are three of them on `Summary`, one above the region, one on a row that go
 
 The part positioning the boxes is VML, a legacy format, and we rewrite it rather than copy it.
 That rewrite loses self-closing tag spelling the way every other rewritten part does, and whether Excel minds is exactly what this check answers.
+It does not, as of 2026-08-22, so what is left is a regression check rather than an open question.
 A comment appearing on the wrong row, or a marker with no box behind it, means the two parts disagree.
 
 

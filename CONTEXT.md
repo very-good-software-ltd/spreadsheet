@@ -335,7 +335,8 @@ That is the one place a comment parts company with a shape, which closes up agai
 The same VML part carries any form control and any header or footer image the sheet has, so those move on the same pass.
 
 No library we test against reads a comment back, `exceljs` not even from its own file, so SheetJS is what proves the moved comment survives.
-Whether Excel accepts a VML part we rewrote is a manual check, since the rewrite loses self-closing tag spelling the way every other rewritten part does.
+That Excel accepts a VML part we rewrote rather than copied was the open question, since the rewrite loses self-closing tag spelling the way every other rewritten part does.
+Confirmed by hand in Excel on 2026-08-22.
 
 A region shrinks to one row and no further.
 A range whose every endpoint is deleted becomes `#REF!` in Excel, so one surviving row is what keeps a total written over the region alive, and it costs one blank formatted row on a run with no data at all.
