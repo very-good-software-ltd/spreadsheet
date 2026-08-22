@@ -75,7 +75,13 @@ So Excel rebuilds a cache marked `refreshOnLoad`, which was the open question an
 800 against the 1000 the file was saved with says the same thing from the other side.
 No prompt appeared before the refresh, so this is a silent guarantee rather than something a caller has to warn anyone about.
 
-What is still worth a pass before a release is a real template, since the generated one has no chart in it.
+**Not checked yet**, and the next thing to run: chart series ranges, which began moving on 2026-08-22.
+Open `chart-filled.xlsx` and work down its Checks sheet.
+
+Two things turn on it that nothing here can settle.
+Whether Excel accepts a chart part we rewrote rather than copied, which is the same question the VML part answered yes to.
+And whether Excel plots a chart from the range we moved or from the copy of the values the chart carries, which is the same bargain the pivot cache strikes, except that a chart has no `refreshOnLoad` to ask with.
+If it plots the copy, every chart in a filled file shows the figures from before the fill, and moving the ranges bought nothing until someone clicks into the chart.
 
 
 ## Start here
@@ -89,26 +95,27 @@ That writes three files into `manual-check/`:
 - `template.xlsx`, a made-up corporate template with a merged heading, column widths, frozen panes, conditional formatting, a pre-formatted data region, a named region on its `Summary` sheet, an Excel Table on its `Ledger` sheet, a total formula and a calculation chain.
 - `filled.xlsx`, that template after this library filled it in.
 - `pivot-filled.xlsx`, the pivot template at `test/fixtures/pivot-template.xlsx` after the same treatment.
-  That one is saved from Excel and kept with the tests, because `exceljs` cannot write a pivot table and so the script cannot generate one.
+- `chart-filled.xlsx`, the chart template at `test/fixtures/chart-template.xlsx` after the same treatment.
 
-Open `filled.xlsx` and `pivot-filled.xlsx` in Excel.
+The last two are saved from Excel and kept with the tests, because `exceljs` can write neither a pivot table nor a chart, so the script cannot generate either.
+
+Open all three in Excel.
 Each has a **Checks** sheet listing every cell to look at and what you should see there, so the files carry their own checklists and you do not have to read this document while you work.
 
-Everything is fine if both open with no prompt and every expectation holds.
+Everything is fine if all three open with no prompt and every expectation holds.
 Work down those sheets, then come back here for the things they cannot cover.
 
 
 ## What the generated template cannot cover
 
-`exceljs` writes the template, and it cannot write a chart.
-A chart is the part most likely to be lost by a writer that rebuilds a file from a model, so it is the most valuable thing to check and the one thing the generated file misses.
-The pivot table is covered by the committed fixture instead, which is what `pivot-filled.xlsx` is for.
+`exceljs` writes the template, and it can write neither a chart nor a pivot table.
+Both are covered by committed fixtures instead, which is what `chart-filled.xlsx` and `pivot-filled.xlsx` are for.
 
-To cover it, put a real template at `manual-check/template.xlsx` and run the script again.
+What no fixture here covers is a template someone actually uses, with data validation, print setup and macros in it.
+To check one, put it at `manual-check/template.xlsx` and run the script again.
 It uses your file instead of generating one.
 Then check:
 
-- [ ] Charts still render, and still point at their data.
 - [ ] Data validation still restricts what you can type.
 - [ ] Print setup, headers and footers survive.
 - [ ] Defined names still resolve.
@@ -206,7 +213,8 @@ It is anchored below the Total, which is itself below the region, with one empty
 Two rows come out of the region, so both have to come up by two and that single empty row has to stay a single empty row.
 Three empty rows means the picture did not move.
 
-This is the check most worth repeating against a real template, since a real one will have a chart rather than a picture, and a chart also holds its own series ranges, which we rewrite as formulas rather than as anchors.
+A chart holds its own series ranges as well as an anchor, so a picture only covers half of it.
+The other half has a check of its own, in `chart-filled.xlsx`.
 
 
 ## Why the Summary sheet carries comments
@@ -260,6 +268,7 @@ Not failures, so do not chase them:
 
 - An Excel Table does not grow to cover appended rows.
 - A chart pointing at a fixed range does not extend to cover them either.
+  A chart's series follows a region, because filling one moves rows. Appending moves none, so there is nothing for it to follow.
 - A digital signature is invalidated.
   Any modification does that, and nothing can be done about it.
 - A rewritten part is not byte-identical to its source, only equivalent.

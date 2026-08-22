@@ -4,11 +4,10 @@
 // you should see.
 //
 // Drop your own file at manual-check/template.xlsx and it is used instead of the
-// generated one. Do that for the check nothing here can cover, a real chart, which
-// exceljs cannot write.
+// generated one.
 //
-// It also fills the pivot template kept with the tests, giving a second file to
-// open on the same run, since a pivot table cannot be generated either.
+// It also fills the two templates kept with the tests, giving three files to open
+// on the same run, since neither a pivot table nor a chart can be generated.
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import ExcelJS from "exceljs";
@@ -23,6 +22,11 @@ const FILLED = join(OUTPUT_DIR, "filled.xlsx");
 // check runs off a file saved from Excel and kept with the tests.
 const PIVOT_TEMPLATE = join("test", "fixtures", "pivot-template.xlsx");
 const PIVOT_FILLED = join(OUTPUT_DIR, "pivot-filled.xlsx");
+
+// A chart cannot be generated either, for the same reason, so this one is also a
+// file saved from Excel and kept with the tests.
+const CHART_TEMPLATE = join("test", "fixtures", "chart-template.xlsx");
+const CHART_FILLED = join(OUTPUT_DIR, "chart-filled.xlsx");
 
 const MAIN_NAMESPACE = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const SPREADSHEET_TYPES = "application/vnd.openxmlformats-officedocument.spreadsheetml";
@@ -393,6 +397,66 @@ async function fillPivot(source) {
   return editor.save();
 }
 
+// The chart template holds five rows over `Alpha` to `Epsilon`, all at 100, and
+// every chart in it carries a cached copy of exactly those. Eight rows arrive under
+// names none of them has, so a bar labelled `Row 1` is Excel having read the range
+// we rewrote rather than redrawing what the chart already held.
+const CHART_ROWS = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => [`Row ${n}`, n, 50]);
+
+const CHART_EXPECTATIONS = [
+  ["Where", "What you should see", "Why it matters"],
+  ["The file itself", "Opens with no repair prompt", "A rewritten chart part is accepted"],
+  [
+    "Data rows 2 to 9",
+    "Eight rows, Row 1 to Row 8, replacing the five that were there",
+    "The region took the rows it was given",
+  ],
+  [
+    "Data!A11",
+    "Reads Total, where the template had it at A8",
+    "Everything under the region went down by the three rows that arrived",
+  ],
+  [
+    "Data!C11",
+    "Reads 400, and the formula bar shows SUM(C2:C9)",
+    "The total was written over the region's rows and stretched to cover the ones that arrived",
+  ],
+  [
+    "The chart on the Data sheet",
+    "Eight bars, labelled Row 1 to Row 8. Not five labelled Alpha to Epsilon",
+    "Every chart holds a cached copy of the rows it read, and Alpha to Epsilon is all that copy has, so new labels mean Excel read the range we rewrote instead of redrawing what it held",
+  ],
+  [
+    "The same chart, where it sits",
+    "Still one empty row below Total, now starting on row 13",
+    "A chart anchored below the region came down with the rows. An anchor that did not move leaves it starting on row 10, which is above Total rather than below it",
+  ],
+  [
+    "The chart on the Dashboard sheet",
+    "The same eight bars",
+    "Dashboard has no rows of its own that moved, so this one proves a series follows what it reads rather than where it is drawn",
+  ],
+  [
+    "The Chart1 tab",
+    "The same eight bars",
+    "A chart on its own tab hangs off no worksheet, so this one proves every chart in the file was found rather than only the ones a worksheet points at",
+  ],
+  [
+    "Any of the three charts",
+    "Click the chart, open the Chart Design tab that appears, click Select Data, click Amount in the left-hand list, click Edit. Series values should read =Data!$C$2:$C$9. Press Cancel, then Cancel again",
+    "The only check that reads the reference we wrote rather than inferring it from what the chart drew. Older Excel puts Select Data under the Design or Chart Design tab, and if you cannot find it, skip this row, since the Row 1 labels cover the same ground",
+  ],
+];
+
+async function fillChart(source) {
+  const editor = (await Workbook.open(source)).edit();
+
+  editor.writeRegion("Movements", CHART_ROWS);
+  editor.addWorksheet("Checks").appendRows(CHART_EXPECTATIONS);
+
+  return editor.save();
+}
+
 async function collect(stream) {
   const chunks = [];
   const reader = stream.getReader();
@@ -418,14 +482,11 @@ if (!provided) {
 const source = readFileSync(TEMPLATE);
 writeFileSync(FILLED, await collect(await fill(source)));
 writeFileSync(PIVOT_FILLED, await collect(await fillPivot(readFileSync(PIVOT_TEMPLATE))));
+writeFileSync(CHART_FILLED, await collect(await fillChart(readFileSync(CHART_TEMPLATE))));
 
 console.log(`template: ${TEMPLATE}${provided ? " (yours)" : " (generated)"}`);
 console.log(`filled:   ${FILLED}`);
 console.log(`pivot:    ${PIVOT_FILLED} (from ${PIVOT_TEMPLATE})`);
+console.log(`chart:    ${CHART_FILLED} (from ${CHART_TEMPLATE})`);
 console.log();
-console.log("Open both filled files in Excel and work down each one's Checks sheet.");
-if (!provided) {
-  console.log();
-  console.log("Charts are not covered: exceljs cannot write one, so the picture stands in for it.");
-  console.log(`For a real chart, put a template at ${TEMPLATE} and run this again.`);
-}
+console.log("Open all three filled files in Excel and work down each one's Checks sheet.");

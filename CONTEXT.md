@@ -316,7 +316,7 @@ The conclusion changes because there is a third option we did not consider: do t
 So a save either produces a correct file or throws naming what stopped it.
 Never a file that is quietly wrong.
 
-In scope to move: rows and cells, merged ranges, conditional formatting and data validation ranges, hyperlinks, autofilter, frozen panes, row breaks, table extents, defined names, formula references on the sheet and on every other sheet pointing at it, the anchors a drawing places its shapes by, the cell each comment belongs to along with the box it appears in, and the range a pivot table reads along with the block it is drawn in.
+In scope to move: rows and cells, merged ranges, conditional formatting and data validation ranges, hyperlinks, autofilter, frozen panes, row breaks, table extents, defined names, formula references on the sheet and on every other sheet pointing at it, the anchors a drawing places its shapes by, the cell each comment belongs to along with the box it appears in, the range a pivot table reads along with the block it is drawn in, and the range each chart series reads.
 
 Refused, naming the thing: a formula we cannot rewrite with confidence.
 A shape standing only on rows that are going away, since nothing is left to hang it from and dropping a chart in silence is worse than refusing.
@@ -354,6 +354,19 @@ So the blocker was catching the louder half of the problem and letting the quiet
 
 A cache reading an external query or a scenario is left alone.
 Refreshing one of those on open could ask for credentials, which is a worse outcome than a stale figure, and a region cannot have moved its rows anyway.
+
+Changed: chart series ranges were the last thing left pointing at the old cells, and they were never refused, only copied.
+So a chart over a filled region was silently wrong, which is the failure this decision refuses everywhere else.
+They move now.
+
+A series is a formula in a `c:f` element, sheet qualified and absolute, so `shiftFormula` already knew how to move one and this is the same answer the rest of the write path gives rather than a new one.
+Two files Excel wrote were read to confirm that shape before anything was built.
+Unlike a pivot's source, a chart reference can carry `#REF!`, because it is a formula rather than a range attribute, so a series whose rows all went away is written the way Excel writes it rather than refusing the file.
+
+Charts are found through the content types rather than by following relationships.
+A chart hangs off a drawing, and a drawing off either a worksheet or a chartsheet, but the ranges a chart reads can name any sheet at all.
+So walking out from the sheet that moved would miss a chart drawn anywhere else, and would miss a chart on its own tab entirely.
+A chart is also the only part positioned by row that can read more than one sheet, so it is the only one given more than one move.
 
 A cache built from consolidation ranges is refused.
 It reads worksheet ranges of its own, spelled in a shape we do not read, so we cannot tell whether the moved rows are among them and cannot move them if they are.
@@ -394,7 +407,8 @@ The one thing that has to be learned is how far the rows moved, and it is learne
           everything below the region    yes
    2    every other sheet                yes
    3    the moved sheet's drawings,
-        comments, VML and pivot parts    yes
+        comments, VML and pivot parts,
+        and every chart in the workbook  yes
    4    the workbook part, for its names yes
    5    a grown table's part             yes
    6    the styles part                  no move involved
@@ -511,10 +525,10 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   The first template had no calculation chain, because `exceljs` writes none even for a workbook with formulas, so the code that removes one never ran.
   `scripts/manual-check.mjs` now splices one in so the branch is reachable.
   Desktop Excel is the stricter of the two and agrees.
-  So the design decisions that only Excel could settle are settled, and what remains is coverage rather than doubt: the generated template has no charts or pivot tables, so a real one is still worth a pass.
+  So the design decisions that only Excel could settle are settled, and what remains is coverage rather than doubt: the generated template has no charts or pivot tables, so the two fixtures saved from Excel and kept in `test/fixtures` cover those instead.
   `npm run manual-check` builds the file to try it with.
 - **What a written file does not update.**
-  A chart pointing at a fixed range does not extend to cover rows that were written.
+  A chart pointing at a fixed range does not extend to cover rows appended below it, since appending moves no rows for the range to follow. Filling a region does move them, and a chart's series follows.
   An Excel Table written by name does now grow, unless it has a totals row.
   One filled by row number through `writeRows` or `appendRows` still does not, because nothing in that call says the rows belong to it.
   A digitally signed workbook has its signature invalidated by any modification, which is inherent and not fixable.
@@ -525,10 +539,30 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   In place: the byte-identity test in `test/xlsx/write-fidelity.test.ts` fills a file `exceljs` wrote and asserts every entry we did not rewrite comes out with the same checksum, compressed size and bytes, including the theme and document properties, which we have no reader for at all.
   `exceljs` and `xlsx` both read the output back.
   The loop is guarded by naming parts it must have checked, so it cannot pass by checking nothing.
-  Still missing: a real template with charts, pivot tables and conditional formatting.
-  What `exceljs` writes has no part that exercises those, so the most valuable case is still unproven.
+  `test/fixtures/pivot-template.xlsx` and `test/fixtures/chart-template.xlsx` are files Excel wrote, kept because `exceljs` can write neither part, and both are filled and asserted against in tests.
+  Still missing: conditional formatting, which `exceljs` does write but not in a template that exercises the write path.
   Excel offering to repair a file is the failure that matters most and no library round-trip catches it.
   That is a manual check, listed in `MANUAL-CHECKS.md`.
+- **Whether Excel plots a chart from the range or from its own copy of the values (open).**
+  A chart part carries a cached copy of everything each series read, the way a pivot cache does.
+  We move the ranges and leave the copy alone, which is only good enough if Excel re-reads the range on open.
+  A pivot says so with `refreshOnLoad` and a chart has no equivalent to say it with, so this rests on behaviour rather than on anything in the file.
+  If Excel plots the copy, a filled file shows the figures from before the fill until someone clicks into the chart, and moving the ranges bought very little.
+  `chart-filled.xlsx` from `npm run manual-check` answers it: the eight rows it writes carry labels no cached copy in the file has.
+
+- **Charts in the newer chartex format (open).**
+  Treemap, sunburst, histogram, box and whisker, waterfall, funnel and map charts are written to a different part, with its own content type, which `readChartPaths` does not look for.
+  So one of those over a filled region is silently wrong, which is the thing this design refuses.
+  Its references look like they are spelled the same way, in an element also named `f`, but that is not in ECMA-376 and we have not read a real one, so building on it would be guessing.
+  Settling it needs a file with a waterfall chart in it, the same missing-file problem the pivot and chart work both had.
+  Until then the choice is between refusing a save when the package holds one and leaving it stale, and that is not decided.
+
+- **A chartsheet is listed as a worksheet (open).**
+  `readWorkbook` takes every `<sheet>` in the workbook part, so a chart on its own tab comes back from `worksheets` as though it held cells.
+  `test/fixtures/chart-template.xlsx` is the first file here with one, and filling it is unaffected, since nothing writes to that sheet.
+  What is wrong is the reading side: `openRows` on it reads a part with no rows in it, and an editor could be asked for it.
+  Found while doing the chart work and left alone, since it is a reader question rather than a write path one.
+
 - **Reading by name (parked).**
   The writer parses defined names anyway, so exposing the resolved names and their extents to a reader is a small surface for free parsing.
   The case that would earn it is an input workbook, a filled-in form whose values live in named cells, where the name survives an author moving the cell and a coordinate does not.

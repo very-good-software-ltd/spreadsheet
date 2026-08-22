@@ -548,7 +548,7 @@ Saving twice throws, because your row sources have already been read and the sec
   Rows move only for `writeRegion`, where the region says which rows are the data.
 - Deleting or renaming a sheet.
   Both ripple into everything that refers to them by name.
-- Growing a chart's range to cover rows you wrote.
+- Growing a chart's range to cover rows appended below it, since appending moves nothing for the range to follow.
 - Growing an Excel Table you filled by row number, since nothing in that call says the rows belong to it.
   Address the table by name and it grows.
 - Anything on a sheet whose rows are moving that we cannot move with them.
@@ -558,6 +558,10 @@ Saving twice throws, because your row sources have already been read and the sec
 Charts and images do move.
 A shape anchored below the region comes down or up with the rows, and one anchored across the region stretches, the same as Excel does when you insert rows by hand.
 The one case that stops a save is a shape standing only on rows that are going away, since there would be nothing left to hang it from.
+
+A chart also moves the range each of its series reads, so a chart over a region you filled plots the rows you wrote rather than the cells they used to sit in.
+That holds wherever the chart is drawn, on the sheet that moved, on another sheet, or on a tab of its own, because a series names the sheet it reads.
+A chart built from a named range needs nothing moved, since the name moves itself.
 
 Cell comments move too, both the cell they are attached to and the box they appear in.
 A comment on a row that goes away goes with it, which is what Excel does when you delete that row by hand.
