@@ -362,7 +362,11 @@ const PIVOT_ROWS = [
 const PIVOT_EXPECTATIONS = [
   ["Where", "What you should see", "Why it matters"],
   ["The file itself", "Opens with no repair prompt", "A rewritten pivot cache is accepted"],
-  ["Data rows 2 to 9", "Eight rows, the three that were there replaced", "The region took the rows it was given"],
+  [
+    "Data rows 2 to 9",
+    "Eight rows, each with its own region and month, replacing the five that were there",
+    "The region took the rows it was given, and every row kept its own values rather than repeating the last",
+  ],
   [
     "The Pivot sheet",
     "Four regions listed, East, North, South and West",
@@ -374,9 +378,9 @@ const PIVOT_EXPECTATIONS = [
     "1000 is the total of the rows the file was saved with, so that figure means the cache was not rebuilt",
   ],
   [
-    "PivotTable Analyze, Change Data Source",
-    "Reads Data!$A$1:$C$9",
-    "The cached source range grew with the rows rather than stopping where it did",
+    "The pivot's source range",
+    "Click a cell in the pivot, open the PivotTable Analyze tab that appears, click Change Data Source. It should read Data!$A$1:$C$9. Press Cancel, not OK",
+    "The only check that reads the range we wrote rather than inferring it from what the pivot drew. Older Excel calls that tab Analyze or Options, and if you cannot find it at all, skip this row, since the West check covers the same ground",
   ],
 ];
 
