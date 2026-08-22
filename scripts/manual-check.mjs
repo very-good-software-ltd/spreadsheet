@@ -88,6 +88,16 @@ const EXPECTATIONS = [
     "A picture anchored below the region came up with the rows. Three empty rows means it did not move, and a chart is anchored the same way",
   ],
   [
+    "Summary!A1 and Summary!A5",
+    "Both show a comment marker, reading 'Stays where it is' and 'Comes up with the total'",
+    "A comment below the region came up with the rows, and both halves of it came with it, the cell it belongs to and the box it appears in",
+  ],
+  [
+    "Summary, anywhere on the sheet",
+    "No comment reading 'Goes away with its row'",
+    "A comment on a row that was taken out went with it, instead of being left on someone else's row",
+  ],
+  [
     "Formulas, Name Manager",
     "Still lists Movements over Summary!$B$3:$D$5",
     "The workbook part is rewritten rather than copied, and the names came through it intact",
@@ -193,6 +203,12 @@ async function buildTemplate() {
   summary.getCell("A1").font = { bold: true };
   summary.getCell("A7").value = "Total";
   summary.getCell("A7").font = { bold: true };
+  // One comment above the region, one on a row that goes away and one below it. A
+  // comment is written across two parts, the cell it belongs to in one and the box
+  // it appears in in another, so this is the only check that the pair agree.
+  summary.getCell("A1").note = "Stays where it is";
+  summary.getCell("A4").note = "Goes away with its row";
+  summary.getCell("A7").note = "Comes up with the total";
   // Written over the region's rows, so shrinking the region has to rewrite it. The
   // cached result is wrong for the data about to arrive, as everywhere else here.
   summary.getCell("B7").value = { formula: "SUM(B3:B5)", result: 0 };

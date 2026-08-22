@@ -59,6 +59,9 @@ Checked on 2026-08-18, after tables landed.
 A structured reference resolves over the table's extent and nothing else, so that number is Excel agreeing the table grew, not just that the rows are on the sheet.
 Growing a table's extent and its filter's is therefore confirmed.
 
+Not checked yet: comments moving.
+That landed after the last pass, so the three comments on `Summary` have never been in front of Excel, and the VML part positioning them has never been rewritten by us and opened.
+
 What is still worth a pass before a release is a real template, since the generated one has no charts or pivot tables in it.
 
 
@@ -187,6 +190,19 @@ Two rows come out of the region, so both have to come up by two and that single 
 Three empty rows means the picture did not move.
 
 This is the check most worth repeating against a real template, since a real one will have a chart rather than a picture, and a chart also holds its own series ranges, which we rewrite as formulas rather than as anchors.
+
+
+## Why the Summary sheet carries comments
+
+This is the one part of the file no library can check for us.
+`exceljs` reads no comment back, not even from a file it wrote itself, so nothing in CI can prove a comment survived a save.
+SheetJS does read them, and a test uses it to prove the moved comment is still there under the right cell, but that only proves another JavaScript library is happy.
+
+There are three of them on `Summary`, one above the region, one on a row that goes away and one below it, so a single run covers moving, staying and being dropped.
+
+The part positioning the boxes is VML, a legacy format, and we rewrite it rather than copy it.
+That rewrite loses self-closing tag spelling the way every other rewritten part does, and whether Excel minds is exactly what this check answers.
+A comment appearing on the wrong row, or a marker with no box behind it, means the two parts disagree.
 
 
 ## Whether a name's case matters
