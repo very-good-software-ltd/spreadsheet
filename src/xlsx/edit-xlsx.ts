@@ -16,6 +16,7 @@ import type { TableOnSheet } from "./read-tables";
 import type { WorkbookInfo } from "./read-workbook";
 import { shiftFor } from "./region-shift";
 import { type NamedThings, resolveRegion } from "./resolve-region";
+import { shiftChartReferences } from "./shift-chart";
 import { shiftCommentRefs } from "./shift-comment";
 import { shiftDrawingAnchors } from "./shift-drawing";
 import type { RowShift } from "./shift-formula";
@@ -123,6 +124,7 @@ export class XlsxEditor implements Editor {
     private readonly comments: ReadonlyMap<string, CommentParts> = new Map(),
     private readonly pivotCaches: readonly PivotCache[] = [],
     private readonly pivotTables: ReadonlyMap<string, readonly string[]> = new Map(),
+    private readonly charts: readonly string[] = [],
   ) {
     this.targets = workbook.worksheets.map((sheet) => ({ name: sheet.name, path: sheet.path, added: false }));
     this.takenRelationshipIds = new Set(workbook.relationshipIds);
@@ -398,8 +400,11 @@ export class XlsxEditor implements Editor {
   // Which parts positioned by row belong to a worksheet a region is being written
   // into. That a region was written is known before any row is read, which is when
   // the choice to copy an entry or rebuild it has to be made.
-  private anchoredParts(): Map<string, AnchoredPart> {
-    const moving = new Map<string, AnchoredPart>();
+  private anchoredParts(): Map<string, AnchoredPart[]> {
+    const moving = new Map<string, AnchoredPart[]>();
+    const move = (path: string, part: AnchoredPart): void => {
+      moving.set(path, [...(moving.get(path) ?? []), part]);
+    };
 
     for (const [index, edits] of this.edits) {
       const name = this.targets[index]?.name;
@@ -410,27 +415,34 @@ export class XlsxEditor implements Editor {
       const comments = this.comments.get(name);
 
       for (const path of this.drawings.get(name) ?? []) {
-        moving.set(path, { sheet: name, shift: shiftDrawingAnchors });
+        move(path, { sheet: name, shift: shiftDrawingAnchors });
       }
       for (const path of comments?.comments ?? []) {
-        moving.set(path, { sheet: name, shift: shiftCommentRefs });
+        move(path, { sheet: name, shift: shiftCommentRefs });
       }
       for (const path of comments?.vml ?? []) {
-        moving.set(path, { sheet: name, shift: shiftVmlAnchors });
+        move(path, { sheet: name, shift: shiftVmlAnchors });
       }
       for (const path of this.pivotTables.get(name) ?? []) {
-        moving.set(path, { sheet: name, shift: shiftPivotLocation });
+        move(path, { sheet: name, shift: shiftPivotLocation });
       }
 
       // A cache belongs to the workbook rather than to a sheet, and names the sheet
       // it reads, so it is picked up from whichever sheet is moving.
       for (const cache of this.pivotCaches) {
         if (cache.source === "worksheet" && cache.sheet === name) {
-          moving.set(cache.path, {
+          move(cache.path, {
             sheet: name,
             shift: (events, shift) => withCacheRefreshedOnLoad(shiftPivotSource(events, shift)),
           });
         }
+      }
+
+      // A chart names the sheet it reads in the reference itself, and one chart can
+      // read several, so every chart is offered every move and each reference
+      // answers for itself.
+      for (const path of this.charts) {
+        move(path, { sheet: name, shift: shiftChartReferences });
       }
     }
 
@@ -473,11 +485,18 @@ export class XlsxEditor implements Editor {
     return stale;
   }
 
-  private async *anchoredPart(path: string, moving: AnchoredPart): AsyncIterable<string> {
-    const shift = await (await this.regions()).find((region) => region.sheet === moving.sheet)?.shift;
-    const events = this.xml.read(this.archive.openStream(path));
+  private async *anchoredPart(path: string, moving: readonly AnchoredPart[]): AsyncIterable<string> {
+    const regions = await this.regions();
+    let events = this.xml.read(this.archive.openStream(path));
 
-    yield* asPart(flatten(shift === undefined ? events : moving.shift(events, shift)));
+    for (const part of moving) {
+      const shift = await regions.find((region) => region.sheet === part.sheet)?.shift;
+      if (shift !== undefined) {
+        events = part.shift(events, shift);
+      }
+    }
+
+    yield* asPart(flatten(events));
   }
 
   private regions(): Promise<readonly PreparedRegion[]> {

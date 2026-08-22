@@ -6,6 +6,7 @@ import type { XmlReader } from "../xml/xml-reader";
 import type { ZipArchive } from "../zip/zip-archive";
 import { XlsxEditor } from "./edit-xlsx";
 import type { CellContext } from "./interpret-cell";
+import { readChartPaths } from "./read-charts";
 import { type CommentParts, readCommentParts } from "./read-comments";
 import { readDrawingPaths } from "./read-drawings";
 import { type PivotCache, readPivotCaches, readPivotTablePaths } from "./read-pivots";
@@ -32,12 +33,13 @@ export async function readXlsx(archive: ZipArchive): Promise<WorkbookData> {
     pivotTables.set(ref.name, await readPivotTablePaths(archive, xml, ref.path));
   }
   const pivotCaches: readonly PivotCache[] = await readPivotCaches(archive, xml);
+  const charts = await readChartPaths(archive, xml);
   const worksheets: readonly WorksheetInfo[] = refs.map((ref) => ({ name: ref.name, hidden: ref.hidden }));
 
   return {
     worksheets,
     edit(): Editor {
-      return new XlsxEditor(archive, info, styles, tables, drawings, comments, pivotCaches, pivotTables);
+      return new XlsxEditor(archive, info, styles, tables, drawings, comments, pivotCaches, pivotTables, charts);
     },
     openRows(index: number): AsyncIterable<Row> {
       const ref = refs[index];
