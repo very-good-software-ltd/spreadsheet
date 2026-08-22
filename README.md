@@ -206,6 +206,7 @@ import type { Worksheet } from "@very-good-software/spreadsheet";
 export async function readGrid(sheet: Worksheet): Promise<void> {
   for await (const row of sheet.rows()) {
     const columnA = row.cell(0);
+
     console.log(row.number, columnA?.value, row.cells.length);
   }
 }
@@ -251,13 +252,17 @@ import type { Row, Workbook } from "@very-good-software/spreadsheet";
 // is a plain loop when you want it.
 export async function readAll(workbook: Workbook): Promise<Map<string, Row[]>> {
   const sheets = new Map<string, Row[]>();
+
   for (const name of workbook.worksheetNames) {
     const rows: Row[] = [];
+
     for await (const row of workbook.worksheet(name).rows()) {
       rows.push(row);
     }
+
     sheets.set(name, rows);
   }
+
   return sheets;
 }
 
@@ -279,12 +284,15 @@ import type { Row, Worksheet } from "@very-good-software/spreadsheet";
 // stops the reading, and only the first ten rows of a huge file are ever parsed.
 export async function firstTenRows(sheet: Worksheet): Promise<Row[]> {
   const preview: Row[] = [];
+
   for await (const row of sheet.rows()) {
     preview.push(row);
+
     if (preview.length === 10) {
       break;
     }
   }
+
   return preview;
 }
 ```

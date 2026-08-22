@@ -5,13 +5,17 @@ import type { Row, Workbook } from "@very-good-software/spreadsheet";
 // is a plain loop when you want it.
 export async function readAll(workbook: Workbook): Promise<Map<string, Row[]>> {
   const sheets = new Map<string, Row[]>();
+
   for (const name of workbook.worksheetNames) {
     const rows: Row[] = [];
+
     for await (const row of workbook.worksheet(name).rows()) {
       rows.push(row);
     }
+
     sheets.set(name, rows);
   }
+
   return sheets;
 }
 
