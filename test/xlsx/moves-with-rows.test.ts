@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { strFromU8, strToU8, unzipSync, zipSync } from "fflate";
+import { strFromU8, unzipSync } from "fflate";
 import { describe, expect, it } from "vitest";
 import * as SheetJS from "xlsx";
 import { Workbook } from "../../src/workbook";
@@ -29,28 +29,6 @@ async function templateWith(decorate: (workbook: ExcelJS.Workbook, sheet: ExcelJ
   return new Uint8Array(await source.xlsx.writeBuffer());
 }
 
-const PIVOT_CACHE_PART = "xl/pivotCache/pivotCacheDefinition1.xml";
-const PIVOT_CACHE_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition";
-
-// No fixture library writes a pivot table, and only the cached source range is
-// what stops a move, so the smallest thing that carries one is spliced in.
-function withPivotOver(bytes: Uint8Array, sheet: string, extent: string): Uint8Array {
-  const files = unzipSync(bytes);
-  const relationships = strFromU8(files["xl/_rels/workbook.xml.rels"] ?? new Uint8Array());
-
-  files[PIVOT_CACHE_PART] = strToU8(
-    `<pivotCacheDefinition xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cacheSource type="worksheet"><worksheetSource sheet="${sheet}" ref="${extent}"/></cacheSource></pivotCacheDefinition>`,
-  );
-  files["xl/_rels/workbook.xml.rels"] = strToU8(
-    relationships.replace(
-      "</Relationships>",
-      `<Relationship Id="rIdPivot" Type="${PIVOT_CACHE_TYPE}" Target="pivotCache/pivotCacheDefinition1.xml"/></Relationships>`,
-    ),
-  );
-
-  return zipSync(files);
-}
-
 function anchorRowsIn(bytes: Uint8Array): (string | undefined)[] {
   const drawing = strFromU8(unzipSync(bytes)["xl/drawings/drawing1.xml"] ?? new Uint8Array());
 
@@ -78,7 +56,7 @@ async function writeThreeRowsInto(bytes: Uint8Array) {
   return bytesOf(editor.save());
 }
 
-describe("what stops a worksheet's rows moving", () => {
+describe("what moves when a worksheet's rows move", () => {
   it("moves the rows when nothing is in the way", async () => {
     const bytes = await templateWith(() => {});
 
@@ -140,27 +118,5 @@ describe("what stops a worksheet's rows moving", () => {
     });
 
     expect(commentRefsIn(await writeThreeRowsInto(bytes))).toEqual(["B1"]);
-  });
-
-  it("refuses when a pivot table reads from where the rows would move", async () => {
-    const bytes = withPivotOver(await templateWith(() => {}), "Report", "B3:B5");
-
-    await expect(writeThreeRowsInto(bytes)).rejects.toThrow(
-      "that sheet has a pivot table reading from row 3 or below, whose cached source range we do not rewrite",
-    );
-  });
-
-  it("leaves a pivot table reading from above the rows alone", async () => {
-    const bytes = withPivotOver(await templateWith(() => {}), "Report", "B1:B2");
-
-    await expect(writeThreeRowsInto(bytes)).resolves.toBeInstanceOf(Uint8Array);
-  });
-
-  it("names the region and the row the move starts at", async () => {
-    const bytes = withPivotOver(await templateWith(() => {}), "Report", "B3:B5");
-
-    await expect(writeThreeRowsInto(bytes)).rejects.toThrow(
-      'Cannot write into "Data": it moves the rows of worksheet "Report" from row 3',
-    );
   });
 });

@@ -32,7 +32,8 @@ export function LandingPage() {
           <p className="mt-4 text-gray-600 dark:text-gray-300">
             It's early. We read <code className="font-mono">.xlsx</code> and <code className="font-mono">.ods</code> but
             only write <code className="font-mono">.xlsx</code>, nothing more exotic. Some templates we'd rather refuse
-            than get wrong, so a pivot table reading from your data stops the save and tells you so. And we haven't seen the years of odd real-world files the older libraries have. If that's
+            than get wrong, so a formula we can't rewrite with confidence stops the save and tells you which one. And we
+            haven't seen the years of odd real-world files the older libraries have. If that's
             fine for what you're building, give it a try.
           </p>
         </div>

@@ -316,11 +316,11 @@ The conclusion changes because there is a third option we did not consider: do t
 So a save either produces a correct file or throws naming what stopped it.
 Never a file that is quietly wrong.
 
-In scope to move: rows and cells, merged ranges, conditional formatting and data validation ranges, hyperlinks, autofilter, frozen panes, row breaks, table extents, defined names, formula references on the sheet and on every other sheet pointing at it, the anchors a drawing places its shapes by, and the cell each comment belongs to along with the box it appears in.
+In scope to move: rows and cells, merged ranges, conditional formatting and data validation ranges, hyperlinks, autofilter, frozen panes, row breaks, table extents, defined names, formula references on the sheet and on every other sheet pointing at it, the anchors a drawing places its shapes by, the cell each comment belongs to along with the box it appears in, and the range a pivot table reads along with the block it is drawn in.
 
-Refused, naming the thing: a pivot table whose source covers the region.
-A formula we cannot rewrite with confidence.
-And a shape standing only on rows that are going away, since nothing is left to hang it from and dropping a chart in silence is worse than refusing.
+Refused, naming the thing: a formula we cannot rewrite with confidence.
+A shape standing only on rows that are going away, since nothing is left to hang it from and dropping a chart in silence is worse than refusing.
+And rows that take the whole of a pivot's source range with them, since a range attribute has no spelling for a reference pointing nowhere.
 
 A drawing counts rows from zero where a sheet counts from one, and an absolute anchor names no row at all and does not move, which matches Excel.
 
@@ -337,6 +337,27 @@ The same VML part carries any form control and any header or footer image the sh
 No library we test against reads a comment back, `exceljs` not even from its own file, so SheetJS is what proves the moved comment survives.
 That Excel accepts a VML part we rewrote rather than copied was the open question, since the rewrite loses self-closing tag spelling the way every other rewritten part does.
 Confirmed by hand in Excel on 2026-08-22.
+
+Changed: pivot tables were refused too, and were the last thing on a sheet that was.
+A pivot is three parts.
+The cache definition says which range it reads, the cache records hold a copy of the rows in it, and the pivot table part says where the summary is drawn.
+Moving the range is ordinary arithmetic, and so is moving the block when the pivot sits on the sheet that moved.
+The copy of the rows is the interesting one, and we do not rewrite it.
+It can be the largest part in the file, and rebuilding it means reading the data we just wrote back out, which is the kind of second pass the whole design avoids.
+Instead the cache is marked `refreshOnLoad`, which ISO/IEC 29500 defines as the application refreshing the cache when the workbook is loaded.
+That is the same bargain `fullCalcOnLoad` strikes for a stale formula result, and that one is confirmed working in Excel.
+
+A cache whose source is written as a name rather than as a range needs nothing moved, since the name moves itself, but its copy of the rows is stale all the same, so it is marked for refresh and nothing else.
+That case used to pass a save without being noticed at all, because the refusal only ever looked at a range.
+So the blocker was catching the louder half of the problem and letting the quieter half through.
+
+A cache reading anything other than a worksheet, an external query or a cube, is left alone.
+Refreshing one of those on open could ask for credentials, which is a worse outcome than a stale figure, and a region cannot have moved its rows anyway.
+The consolidation source, which does read worksheet ranges, is the gap in that reasoning and is an open question below.
+
+With that, `blockersFor` had nothing left to report and the module is gone.
+What still stops a save is thrown where the work happens: a formula in `shift-formula`, a shape in `shift-drawing`, an extension list in `shift-sheet`, a pivot source in `shift-pivot`.
+That is a better place for it, since the code that knows a thing cannot be moved is the code that tried.
 
 A region shrinks to one row and no further.
 A range whose every endpoint is deleted becomes `#REF!` in Excel, so one surviving row is what keeps a total written over the region alive, and it costs one blank formatted row on a run with no data at all.
@@ -367,7 +388,7 @@ The one thing that has to be learned is how far the rows moved, and it is learne
           everything below the region    yes
    2    every other sheet                yes
    3    the moved sheet's drawings,
-        comments and VML                 yes
+        comments, VML and pivot parts    yes
    4    the workbook part, for its names yes
    5    a grown table's part             yes
    6    the styles part                  no move involved
@@ -470,7 +491,7 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   Writing into a table rewrites that table's part even when the table did not change size, because whether to copy an entry or rebuild it is decided before any row has been read and the size is only known afterwards.
   The result is semantically identical, so this costs byte-identity on one small part and nothing else.
   Five parts are rewritten on any edit: the edited sheets, `xl/styles.xml`, `xl/workbook.xml`, and, only when there was a calculation chain to drop, `[Content_Types].xml` and `xl/_rels/workbook.xml.rels`.
-  Writing into a region adds the moved sheet's drawings, its comments and the VML positioning them, because everything positioned by row has to move with the rows.
+  Writing into a region adds the moved sheet's drawings, its comments, the VML positioning them and the pivot parts reading or drawn on it, because everything positioned by row has to move with the rows.
   A rewritten part is re-emitted from the XML event stream, which does not carry attribute order, self-closing tag spelling, comments or processing instructions.
   So it is semantically equivalent but not byte-identical, and the byte-identity test can only cover the parts we did not touch.
   Whether that gap ever matters is unknown.
@@ -516,6 +537,25 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   The write benchmark has `region-stream` and `region-load` modes, and `--cap` is the measure worth quoting, since peak RSS counts memory the runtime has not given back.
   What is left is a flat 15MB or so above `appendRows`, the same at fifty thousand rows as at a million, so it is a constant and not something that grows.
   Two shapes still count first, both recorded in decision 15: something above the region reading rows below it, and two regions whose sheets read each other.
+
+- **Whether Excel really rebuilds a pivot cache on open.**
+  We mark a moved cache `refreshOnLoad` and leave its copy of the rows as it was, so between opening the file and the refresh happening the cache describes data that is no longer there.
+  ISO/IEC 29500 says the application refreshes the cache when the workbook is loaded, and `fullCalcOnLoad` behaving that way for formulas is confirmed, but the pivot version is reasoning from the neighbouring case rather than evidence.
+  What we do not know: whether Excel prompts before refreshing, whether a `recordCount` that no longer matches is a repair prompt, and what a reader that ignores `refreshOnLoad` shows.
+  `MANUAL-CHECKS.md` carries the check, against a template saved from real Excel, since no library we depend on writes a pivot table.
+  We considered also setting `invalid="1"`, which the spec defines as the cache needing a refresh, and did not, because a cache marked invalid whose refresh the user declines may show nothing at all, where a stale one shows an old figure.
+  Revisit if the manual check says Excel ignores `refreshOnLoad` on its own.
+
+- **A pivot drawn on the sheet whose rows moved.**
+  The pivot table part's `location` is moved as a plain range, and the counts inside it are relative to that range's top left, so they are left alone.
+  This is unit tested and has never been in front of Excel, because the template we have puts the pivot on its own sheet, which is where Excel puts one by default.
+  The case is real, a pivot below a data region on one sheet, and worth covering the next time a template is made.
+
+- **A consolidation pivot source.**
+  A cache reading anything other than a worksheet is left alone, on the reasoning that a region cannot have moved its rows.
+  That holds for an external query and for a cube, and not for a consolidation source, which reads worksheet ranges of its own.
+  We do not handle it and do not refuse it, so a consolidation pivot over a moved region goes stale quietly.
+  Left open rather than guessed at: we have no file with one, and inventing the shape of `rangeSet` from memory is the kind of confident wrongness this repo is against.
 
 - **A grown table's `sortState`.**
   A table part can hold a `sortState` recording the last sort applied to it, with its own `ref` over the data.

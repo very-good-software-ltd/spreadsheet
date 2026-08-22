@@ -545,7 +545,7 @@ Saving twice throws, because your row sources have already been read and the sec
   Address the table by name and it grows.
 - Anything on a sheet whose rows are moving that we cannot move with them.
   Rather than leave it stale, `save` throws and names it.
-  That means a pivot table reading from the region, a formula spanning a range of sheets, a whole row reference, and a sheet carrying an extension list, which is where sparklines and the newer conditional formats live.
+  That means a formula spanning a range of sheets, a whole row reference, a sheet carrying an extension list, which is where sparklines and the newer conditional formats live, and rows that would take the whole of a pivot table's source range with them.
 
 Charts and images do move.
 A shape anchored below the region comes down or up with the rows, and one anchored across the region stretches, the same as Excel does when you insert rows by hand.
@@ -553,6 +553,11 @@ The one case that stops a save is a shape standing only on rows that are going a
 
 Cell comments move too, both the cell they are attached to and the box they appear in.
 A comment on a row that goes away goes with it, which is what Excel does when you delete that row by hand.
+
+Pivot tables move as well.
+The range a pivot reads follows the rows, and so does the pivot itself when it sits on the sheet that moved.
+A pivot keeps its own copy of the source rows, which we do not rewrite, so the file asks Excel to rebuild it on open instead.
+That means the figures are right once Excel has opened the file, and a reader that does not refresh caches shows the old ones.
 
 - Keeping a digital signature valid.
   Any change to a file invalidates it.

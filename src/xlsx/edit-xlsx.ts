@@ -9,8 +9,8 @@ import { createZipWriter } from "../zip/create-zip-writer";
 import type { ZipArchive } from "../zip/zip-archive";
 import { MAIN_NAMESPACE } from "./blank-workbook";
 import { type CellEdit, mergeRowEdits, type RowBlock } from "./merge-row-edits";
-import { blockersFor } from "./movement-blockers";
 import type { CommentParts } from "./read-comments";
+import type { PivotCache } from "./read-pivots";
 import type { Styles } from "./read-styles";
 import type { TableOnSheet } from "./read-tables";
 import type { WorkbookInfo } from "./read-workbook";
@@ -19,6 +19,7 @@ import { type NamedThings, resolveRegion } from "./resolve-region";
 import { shiftCommentRefs } from "./shift-comment";
 import { shiftDrawingAnchors } from "./shift-drawing";
 import type { RowShift } from "./shift-formula";
+import { shiftPivotLocation, shiftPivotSource, withCacheRefreshedOnLoad } from "./shift-pivot";
 import { shiftForeignFormulas } from "./shift-sheet";
 import { shiftVmlAnchors } from "./shift-vml";
 import {
@@ -120,6 +121,8 @@ export class XlsxEditor implements Editor {
     private readonly tables: readonly TableOnSheet[] = [],
     private readonly drawings: ReadonlyMap<string, readonly string[]> = new Map(),
     private readonly comments: ReadonlyMap<string, CommentParts> = new Map(),
+    private readonly pivotCaches: readonly PivotCache[] = [],
+    private readonly pivotTables: ReadonlyMap<string, readonly string[]> = new Map(),
   ) {
     this.targets = workbook.worksheets.map((sheet) => ({ name: sheet.name, path: sheet.path, added: false }));
     this.takenRelationshipIds = new Set(workbook.relationshipIds);
@@ -207,6 +210,10 @@ export class XlsxEditor implements Editor {
     const rewritten = this.packageParts(part);
     const sheets = this.sheetParts(dateStyles);
     const anchored = this.anchoredParts();
+
+    for (const [path, content] of this.staleCaches()) {
+      rewritten.set(path, content);
+    }
 
     for (const entry of this.archive.entries()) {
       if (
@@ -347,10 +354,6 @@ export class XlsxEditor implements Editor {
       ? emptyWorksheet()
       : this.xml.read(this.archive.openStream(target.path));
 
-    if (own !== undefined) {
-      await this.refuseIfBlocked(target, own);
-    }
-
     // Its own move is applied as the sheet is written, because only the writer
     // knows how far it goes. Every other move is already settled by then, and only
     // a qualified reference can name the sheet it happened on.
@@ -413,9 +416,43 @@ export class XlsxEditor implements Editor {
       for (const path of comments?.vml ?? []) {
         moving.set(path, { sheet: name, shift: shiftVmlAnchors });
       }
+      for (const path of this.pivotTables.get(name) ?? []) {
+        moving.set(path, { sheet: name, shift: shiftPivotLocation });
+      }
+
+      // A cache belongs to the workbook rather than to a sheet, and names the sheet
+      // it reads, so it is picked up from whichever sheet is moving.
+      for (const cache of this.pivotCaches) {
+        if (cache.fromWorksheet && cache.sheet === name) {
+          moving.set(cache.path, {
+            sheet: name,
+            shift: (events, shift) => withCacheRefreshedOnLoad(shiftPivotSource(events, shift)),
+          });
+        }
+      }
     }
 
     return moving;
+  }
+
+  // A cache whose source is written as a name rather than as a range needs no range
+  // moved, since the name moves itself, but its copy of the rows is stale all the
+  // same. It waits on nothing, so it is rewritten rather than held back.
+  private staleCaches(): Map<string, () => AsyncIterable<string>> {
+    const stale = new Map<string, () => AsyncIterable<string>>();
+
+    if (![...this.edits.values()].some((edits) => edits.regions.length > 0)) {
+      return stale;
+    }
+
+    for (const cache of this.pivotCaches) {
+      if (cache.fromWorksheet && cache.sheet === undefined) {
+        const events = (): AsyncIterable<readonly XmlEvent[]> => this.xml.read(this.archive.openStream(cache.path));
+        stale.set(cache.path, () => asPart(flatten(withCacheRefreshedOnLoad(events()))));
+      }
+    }
+
+    return stale;
   }
 
   private async *anchoredPart(path: string, moving: AnchoredPart): AsyncIterable<string> {
@@ -423,20 +460,6 @@ export class XlsxEditor implements Editor {
     const events = this.xml.read(this.archive.openStream(path));
 
     yield* asPart(flatten(shift === undefined ? events : moving.shift(events, shift)));
-  }
-
-  // Asked before the rows are counted, so the row the move starts at is not known
-  // yet. The region's own first row is the earliest it can be, which refuses a
-  // little more than it has to rather than a little less.
-  private async refuseIfBlocked(target: Target, prepared: PreparedRegion): Promise<void> {
-    const at = prepared.region.firstRow;
-    const blockers = await blockersFor(this.archive, this.xml, target.name, { sheet: prepared.sheet, at, by: 0 });
-
-    if (blockers.length > 0) {
-      throw new Error(
-        `Cannot write into "${prepared.region.name}": it moves the rows of worksheet "${target.name}" from row ${at}, and that sheet has ${blockers.join(", and ")}`,
-      );
-    }
   }
 
   private regions(): Promise<readonly PreparedRegion[]> {

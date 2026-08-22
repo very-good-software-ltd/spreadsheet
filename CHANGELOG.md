@@ -14,6 +14,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   A comment on a row that goes away goes with it, text and all, the same as deleting that row in Excel.
   Form controls and header or footer images share the part the boxes live in, so they move on the same pass.
   A pivot table reading from the region is now the only thing on the sheet itself that still stops a save.
+- Pivot tables move with the rows instead of stopping the save.
+  The range a pivot reads follows the region, and the pivot itself follows when it is drawn on the sheet that moved.
+  A pivot holds its own copy of the source rows, which we do not rewrite, so the file asks the application to rebuild that copy when it opens.
+  Excel does.
+  A reader that ignores the request shows the figures from before your fill.
+  A pivot whose source is a named range or a table was never refused and was going stale unnoticed, and now asks for the same rebuild.
+  Nothing on a worksheet stops a save any more.
+  What still can: a formula we cannot rewrite, a sheet carrying an extension list, a shape left standing on nothing, and rows that would take the whole of a pivot's source range with them.
+
+
+### Fixed
+
+- Saving no longer hangs when the region is on any worksheet but the first.
+  Every other sheet waits to learn how far the rows moved, and only the sheet holding the region learns it, so a sheet the workbook listed ahead of it waited forever.
+  A file saved from Excel with the pivot sheet before the data sheet is the ordinary way to hit this.
 
 
 ## [0.3.1] - 2026-08-19
