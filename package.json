@@ -1,6 +1,6 @@
 {
   "name": "@very-good-software/spreadsheet",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Streaming reader for Excel .xlsx and OpenDocument .ods, in Node and the browser.",
   "homepage": "https://spreadsheet.verygoodsoftware.net",
   "keywords": [
