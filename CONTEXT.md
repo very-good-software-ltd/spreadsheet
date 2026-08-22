@@ -538,13 +538,14 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   What is left is a flat 15MB or so above `appendRows`, the same at fifty thousand rows as at a million, so it is a constant and not something that grows.
   Two shapes still count first, both recorded in decision 15: something above the region reading rows below it, and two regions whose sheets read each other.
 
-- **Whether Excel really rebuilds a pivot cache on open.**
+- **Whether Excel really rebuilds a pivot cache on open (resolved).**
   We mark a moved cache `refreshOnLoad` and leave its copy of the rows as it was, so between opening the file and the refresh happening the cache describes data that is no longer there.
-  ISO/IEC 29500 says the application refreshes the cache when the workbook is loaded, and `fullCalcOnLoad` behaving that way for formulas is confirmed, but the pivot version is reasoning from the neighbouring case rather than evidence.
-  What we do not know: whether Excel prompts before refreshing, whether a `recordCount` that no longer matches is a repair prompt, and what a reader that ignores `refreshOnLoad` shows.
-  `MANUAL-CHECKS.md` carries the check, against a template saved from real Excel, since no library we depend on writes a pivot table.
+  Confirmed by hand in Excel on 2026-08-22.
+  A pivot over eight written rows drew a region that appears in none of the cached rows, and totalled the data we wrote rather than the data the file was saved with.
+  No prompt appeared first, so this is a silent guarantee rather than something a caller has to warn anyone about, and a `recordCount` that no longer matches is not a repair prompt either.
+  What a reader that ignores `refreshOnLoad` shows is still unknown, and is the caveat the README carries.
   We considered also setting `invalid="1"`, which the spec defines as the cache needing a refresh, and did not, because a cache marked invalid whose refresh the user declines may show nothing at all, where a stale one shows an old figure.
-  Revisit if the manual check says Excel ignores `refreshOnLoad` on its own.
+  With `refreshOnLoad` confirmed on its own there is no reason to revisit that.
 
 - **A pivot drawn on the sheet whose rows moved.**
   The pivot table part's `location` is moved as a plain range, and the counts inside it are relative to that range's top left, so they are left alone.

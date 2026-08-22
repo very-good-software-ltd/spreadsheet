@@ -66,8 +66,14 @@ The one on the row the region took out is gone.
 So a VML part we rewrote rather than copied is accepted, which was the open question.
 Excel does not mind losing self-closing tag spelling there any more than it does anywhere else, and the two parts a comment is written across came out agreeing with each other.
 
-Not checked yet: pivot tables moving.
-That landed after the last pass, so `pivot-filled.xlsx` has never been in front of Excel, and whether Excel really rebuilds a cache we marked for refresh is still reasoning rather than evidence.
+Checked on 2026-08-22, after pivot tables could move, on `pivot-filled.xlsx`.
+`Data` holds the eight rows written, each with its own region and month.
+The pivot lists East, North, South and West at 200 each with a grand total of 800, and its source range reads `Data!$A$1:$C$9`.
+
+So Excel rebuilds a cache marked `refreshOnLoad`, which was the open question and the whole reason we do not rewrite the cached rows ourselves.
+`West` is in none of the cached rows the file was saved with, so it cannot be drawn from what the cache held.
+800 against the 1000 the file was saved with says the same thing from the other side.
+No prompt appeared before the refresh, so this is a silent guarantee rather than something a caller has to warn anyone about.
 
 What is still worth a pass before a release is a real template, since the generated one has no chart in it.
 
@@ -82,7 +88,8 @@ That writes three files into `manual-check/`:
 
 - `template.xlsx`, a made-up corporate template with a merged heading, column widths, frozen panes, conditional formatting, a pre-formatted data region, a named region on its `Summary` sheet, an Excel Table on its `Ledger` sheet, a total formula and a calculation chain.
 - `filled.xlsx`, that template after this library filled it in.
-- `pivot-filled.xlsx`, the pivot template at `test/fixtures/pivot-template.xlsx` after the same treatment. That one is saved from Excel and kept with the tests, because `exceljs` cannot write a pivot table and so the script cannot generate one.
+- `pivot-filled.xlsx`, the pivot template at `test/fixtures/pivot-template.xlsx` after the same treatment.
+  That one is saved from Excel and kept with the tests, because `exceljs` cannot write a pivot table and so the script cannot generate one.
 
 Open `filled.xlsx` and `pivot-filled.xlsx` in Excel.
 Each has a **Checks** sheet listing every cell to look at and what you should see there, so the files carry their own checklists and you do not have to read this document while you work.
@@ -112,7 +119,8 @@ If your template names a region of its own, point the `writeRegion` call at that
 
 The script keeps whatever is already at `manual-check/template.xlsx` and only generates one when nothing is there.
 So after a change to the generated template, delete the files in `manual-check/` before running it, or you will be filling yesterday's file.
-The pivot template is not treated that way. It is read from `test/fixtures/` and never overwritten, so it is the same file every run.
+The pivot template is not treated that way.
+It is read from `test/fixtures/` and never overwritten, so it is the same file every run.
 
 
 ## Why each check is there
@@ -223,7 +231,8 @@ We mark the cache `refreshOnLoad` and leave the copy alone, so everything about 
 Reading the totals is not enough to tell.
 Excel could draw the old cached figures and they would look like figures.
 So the fill writes a row for `West`, a region that appears nowhere in the cached copy.
-`West` cannot be drawn from what the cache holds. If you see it, the cache was rebuilt from the range.
+`West` cannot be drawn from what the cache holds.
+If you see it, the cache was rebuilt from the range.
 
 The grand total is the same check from the other side.
 The template was saved with five rows totalling 1000, and the fill writes eight totalling 800.
