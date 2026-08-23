@@ -29,6 +29,12 @@ async function template(): Promise<Uint8Array> {
   report.getCell("B2").value = 10;
   report.getCell("C2").value = { formula: "B2*2", result: 20 };
   report.getCell("A4").value = "Total";
+  // The rule's own style lives in the styles part, which we rewrite, so this also
+  // pins that a `dxfId` still points at the style it was written for.
+  report.addConditionalFormatting({
+    ref: "B2:B4",
+    rules: [{ type: "cellIs", operator: "greaterThan", formulae: ["5"], priority: 1, style: { font: { bold: true } } }],
+  });
   workbook.addWorksheet("Notes").getCell("A1").value = "untouched sheet";
 
   return new Uint8Array(await workbook.xlsx.writeBuffer());
@@ -80,6 +86,20 @@ async function readWithExcelJs(bytes: Uint8Array): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.read(Readable.from([bytes]));
   return workbook;
+}
+
+interface ReadConditionalFormatting {
+  readonly ref: string;
+  readonly rules: readonly { readonly style?: { readonly font?: { readonly bold?: boolean } } }[];
+}
+
+// exceljs reads conditional formatting back but declares nothing for it on a
+// worksheet, so the shape it hands over is named here rather than reached for
+// through an unchecked cast.
+function conditionalFormattingIn(worksheet: ExcelJS.Worksheet | undefined): ReadConditionalFormatting | undefined {
+  const holder = worksheet as unknown as { conditionalFormattings?: readonly ReadConditionalFormatting[] };
+
+  return holder?.conditionalFormattings?.[0];
 }
 
 function open(bytes: Uint8Array): Promise<ZipArchive> {
@@ -164,6 +184,16 @@ describe("what other libraries make of the output", () => {
     const workbook = await readWithExcelJs(written);
 
     expect(workbook.getWorksheet("Report")?.getCell("B1").isMerged).toBe(true);
+  });
+
+  it("exceljs still sees the conditional format, and the style its rule points at", async () => {
+    const written = await filled(await template());
+
+    const workbook = await readWithExcelJs(written);
+    const format = conditionalFormattingIn(workbook.getWorksheet("Report"));
+
+    expect(format?.ref).toBe("B2:B4");
+    expect(format?.rules[0]?.style?.font?.bold).toBe(true);
   });
 
   it("exceljs sees the formula, with no cached result to go stale", async () => {

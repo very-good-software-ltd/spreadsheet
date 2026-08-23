@@ -545,7 +545,9 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   `exceljs` and `xlsx` both read the output back.
   The loop is guarded by naming parts it must have checked, so it cannot pass by checking nothing.
   `test/fixtures/pivot-template.xlsx` and `test/fixtures/chart-template.xlsx` are files Excel wrote, kept because `exceljs` can write neither part, and both are filled and asserted against in tests.
-  Still missing: conditional formatting, which `exceljs` does write but not in a template that exercises the write path.
+  Conditional formatting is covered from both ends now: `test/xlsx/write-fidelity.test.ts` carries a rule in its template, so `exceljs` reads the rule and the `dxf` style it points at back out of a file we wrote, which is the check that the styles part we rewrite still holds what a `dxfId` resolves against.
+  And `test/xlsx/moves-with-rows.test.ts` moves one over a region.
+  That pair found a real bug, recorded in its own question below.
   Excel offering to repair a file is the failure that matters most and no library round-trip catches it.
   That is a manual check, listed in `MANUAL-CHECKS.md`.
 - **Text outside the rows was moved by its tags alone (resolved).**
