@@ -7,6 +7,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-08-23
+
 ### Fixed
 
 - A conditional format and a data validation now follow your rows whole, rule and all.
@@ -159,7 +161,8 @@ A file past 4 GB, or with a single part past 4 GB, needs Zip64 and throws rather
 - List sheets with `workbook.worksheets`, including whether each one is hidden.
 - Ship TypeScript types and an ES module.
 
-[Unreleased]: https://github.com/very-good-software-ltd/spreadsheet/compare/0.5.0...HEAD
+[Unreleased]: https://github.com/very-good-software-ltd/spreadsheet/compare/0.6.0...HEAD
+[0.6.0]: https://github.com/very-good-software-ltd/spreadsheet/compare/0.5.0...0.6.0
 [0.5.0]: https://github.com/very-good-software-ltd/spreadsheet/compare/0.4.0...0.5.0
 [0.4.0]: https://github.com/very-good-software-ltd/spreadsheet/compare/0.3.1...0.4.0
 [0.3.1]: https://github.com/very-good-software-ltd/spreadsheet/compare/0.3.0...0.3.1
