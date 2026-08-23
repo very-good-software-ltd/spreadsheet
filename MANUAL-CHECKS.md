@@ -88,6 +88,16 @@ A chart part we rewrote rather than copied is accepted too, the same answer the 
 The chart on `Data` came down with the rows and still sits one empty row below Total, the one on `Dashboard` followed although no row on that sheet moved, and the one on the chart sheet followed although no worksheet points at it.
 
 
+Checked on 2026-08-23, after a conditional format's rule began moving.
+`Summary!A5` reads `Total` in red, where the template has the label at `A7` and the rule reading `$B7>0`.
+
+So Excel evaluates a rule we rewrote, against the row it now covers rather than the one it used to.
+Red is only possible if the rule came up with the label, since `B7` is empty once the total has moved to `B5`, and nothing is greater than zero there.
+That was the last thing about moving rows that rested on our reading of the format rather than on Excel's behaviour.
+
+The data validation beside it, at `C5`, has not been checked yet.
+
+
 ## Start here
 
 ```sh
