@@ -1,4 +1,4 @@
-export const REPO_URL = "https://github.com/christophgockel/very-good-spreadsheet";
+export const REPO_URL = "https://github.com/very-good-software-ltd/spreadsheet";
 export const NPM_URL = "https://www.npmjs.com/package/@very-good-software/spreadsheet";
 export const NPM_INSTALL = "npm install @very-good-software/spreadsheet";
 

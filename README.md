@@ -5,7 +5,7 @@ Read Excel `.xlsx` and OpenDocument `.ods` spreadsheets in Node and the browser,
 **[Try it live](https://spreadsheet.verygoodsoftware.net)**.
 Drop in an `.xlsx` or `.ods` and watch it stream in your browser.
 
-[npm](https://www.npmjs.com/package/@very-good-software/spreadsheet) | [GitHub](https://github.com/christophgockel/very-good-spreadsheet)
+[npm](https://www.npmjs.com/package/@very-good-software/spreadsheet) | [GitHub](https://github.com/very-good-software-ltd/spreadsheet)
 
 This library reads a spreadsheet as a stream.
 It streams the rows and does not keep them, so the memory it uses stays low even for a very large sheet.
