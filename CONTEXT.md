@@ -556,7 +556,8 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   Both are the quiet kind of wrong this design refuses everywhere else, and both had been reachable since regions could move rows at all.
   What made it invisible is that the two paths that do move formula text, a cell's own and another sheet's, each track the tags they are inside, and the path for everything outside the rows had no such memory because until now nothing out there needed it.
   It has one now, in `insideFormula`, which the writer feeds each event.
-  Confirmed in Excel on 2026-08-23: a rule below a filled region evaluates against the row it came up to, not the one it used to cover.
+  Confirmed in Excel on 2026-08-23, both halves.
+  A rule below a filled region evaluates against the row it came up to, not the one it used to cover, and a data validation refuses on the bound it came up to, naming the moved reference in the message it refuses with.
   Only text a formula tag opened is moved, because the other text out there is a page header or footer, free text that can read like a reference and would be mangled by moving it.
 
 - **Whether Excel plots a chart from the range or from its own copy of the values (resolved).**

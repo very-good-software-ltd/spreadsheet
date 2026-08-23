@@ -101,7 +101,7 @@ const EXPECTATIONS = [
   ],
   [
     "Summary!C5, the bordered cell left of the arrow on row 5",
-    "Type 50, accepted. Type 500, Excel refuses it",
+    "Type 50 and nothing happens, which is it being accepted. Type 500 and Excel refuses it",
     "A data validation's bounds are formulas too, and its upper one is the total beside it. Refusing 50 as well means the bound stayed behind on a cell that is now empty",
   ],
   [
@@ -257,7 +257,8 @@ async function buildTemplate() {
     showErrorMessage: true,
     showInputMessage: true,
     promptTitle: "Data validation check",
-    prompt: "50 should be accepted and 500 refused. Both refused means the upper bound stayed behind.",
+    prompt:
+      "Type 50 and nothing should happen, which is it being accepted. Then type 500, which should be refused. Both refused means the upper bound stayed behind.",
     error: "Must be between 0 and the total",
   };
   for (const [row, month] of [

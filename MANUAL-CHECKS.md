@@ -87,7 +87,6 @@ No prompt appeared first, so it is a silent guarantee rather than something a ca
 A chart part we rewrote rather than copied is accepted too, the same answer the VML part gave.
 The chart on `Data` came down with the rows and still sits one empty row below Total, the one on `Dashboard` followed although no row on that sheet moved, and the one on the chart sheet followed although no worksheet points at it.
 
-
 Checked on 2026-08-23, after a conditional format's rule began moving.
 `Summary!A5` reads `Total` in red, where the template has the label at `A7` and the rule reading `$B7>0`.
 
@@ -95,7 +94,11 @@ So Excel evaluates a rule we rewrote, against the row it now covers rather than 
 Red is only possible if the rule came up with the label, since `B7` is empty once the total has moved to `B5`, and nothing is greater than zero there.
 That was the last thing about moving rows that rested on our reading of the format rather than on Excel's behaviour.
 
-The data validation beside it, at `C5`, has not been checked yet.
+The validation beside it holds too, checked the same day in Excel in the browser.
+`C5` takes 50 without complaint and refuses 500, and the message it refuses with reads "between 0 and =$B5".
+That names the moved reference itself, so Excel is not only honouring the bound, it is showing that the bound came up the two rows the region lost.
+In the template that formula reads `$B7`, which is empty once the total has moved, and a bound left behind would have refused 50 as well.
+Excel in the browser words the refusal itself rather than using the message in the file, which is its own wording and not a fault in what we wrote.
 
 
 ## Start here
