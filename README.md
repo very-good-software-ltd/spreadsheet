@@ -222,6 +222,7 @@ So you can place a row's cells into a fixed set of columns yourself, and decide 
 ## Hidden sheets
 
 `workbook.worksheets` lists each sheet with its name and whether it is hidden, so you can skip hidden sheets.
+A chart sheet, the kind Excel makes when you move a chart onto a sheet of its own, is not one of them, since it holds no rows for you to read.
 
 <!-- example: hidden-sheets.ts -->
 
@@ -385,7 +386,8 @@ async function invoiceLines(): Promise<(string | number)[][]> {
 <!-- /example -->
 
 The region ends up exactly as tall as the data you give it, and the sheet moves around it.
-More rows than it covers pushes everything below down. Fewer pulls everything below up.
+More rows than it covers pushes everything below down.
+Fewer pulls everything below up.
 This is the model you already have from every other templating tool: content below the hole stays below the hole, however big the hole turns out to be.
 
 It is also the same operation you would do by hand in Excel with Insert and Delete, so it behaves the way you would expect it to.
@@ -403,6 +405,7 @@ An unknown name fails at the call.
 So does a name that cannot be written into, and the error says which kind it is, whether that is a formula, a print area, a whole column or a reference Excel broke when someone deleted a sheet.
 Being told a name is a print area is more use than being told it is missing.
 
+
 ### Tables, for when you do not know how many rows there are
 
 A named region has to fit.
@@ -416,9 +419,11 @@ Growing is the part that earns it.
 A total written as `=SUM(Sales[Amount])` refers to the table by name rather than to a range of rows, so it keeps covering everything however many rows arrive.
 Write that same total as `=SUM(C9:C20)` and it will not.
 
-A table with a totals row is fine. That row moves down with everything else.
+A table with a totals row is fine.
+That row moves down with everything else.
 
 The table's own range and its filter's move with it, so Excel keeps treating the new rows as part of the table.
+
 
 ### Formatting is the template's job
 
@@ -433,6 +438,7 @@ We copy that part across without reading it, so the rule survives and applies it
 If that turns out to be too thin, the next step is letting you name a cell style the template already defines.
 That would still leave the template deciding what the style looks like.
 Describing formatting from code is the thing we are not doing.
+
 
 ### Starting from nothing
 
@@ -561,7 +567,7 @@ A shape anchored below the region comes down or up with the rows, and one anchor
 The one case that stops a save is a shape standing only on rows that are going away, since there would be nothing left to hang it from.
 
 A chart also moves the range each of its series reads, so a chart over a region you filled plots the rows you wrote rather than the cells they used to sit in.
-That holds wherever the chart is drawn, on the sheet that moved, on another sheet, or on a tab of its own, because a series names the sheet it reads.
+That holds wherever the chart is drawn, on the sheet that moved, on another sheet, or on a chart sheet of its own, because a series names the sheet it reads.
 A chart built from a named range needs nothing moved, since the name moves itself.
 A chart also carries its own copy of the values it read, which we do not rewrite, and Excel plots from the range rather than from that copy, so the figures are right on open with nothing to refresh.
 

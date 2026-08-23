@@ -128,7 +128,7 @@ export class XlsxEditor implements Editor {
   ) {
     this.targets = workbook.worksheets.map((sheet) => ({ name: sheet.name, path: sheet.path, added: false }));
     this.takenRelationshipIds = new Set(workbook.relationshipIds);
-    this.nextSheetId = Math.max(0, ...workbook.worksheets.map((sheet) => sheet.sheetId)) + 1;
+    this.nextSheetId = workbook.highestSheetId + 1;
   }
 
   worksheet(nameOrIndex: string | number): WorksheetEditor {

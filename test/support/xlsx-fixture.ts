@@ -30,6 +30,9 @@ export interface SheetInput {
   readonly rows: readonly (readonly CellInput[])[];
   readonly hidden?: boolean;
   readonly tables?: readonly TableInput[];
+
+  /** A chart on a sheet of its own, written as a chartsheet part holding no rows. */
+  readonly chartsheet?: boolean;
 }
 
 export interface DefinedNameInput {
@@ -97,6 +100,13 @@ export function xlsx(sheets: readonly SheetInput[], options: WorkbookOptions = {
   let tableNumber = 1;
 
   sheets.forEach((sheet, sheetIndex) => {
+    if (sheet.chartsheet === true) {
+      files[`xl/chartsheets/sheet${sheetIndex + 1}.xml`] = strToU8(
+        `<chartsheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"/></sheetViews></chartsheet>`,
+      );
+      return;
+    }
+
     const rowsXml = sheet.rows
       .map((cells, rowIndex) => {
         const cellsXml = cells
@@ -135,10 +145,11 @@ export function xlsx(sheets: readonly SheetInput[], options: WorkbookOptions = {
   );
 
   const relElements = sheets
-    .map(
-      (_, i) =>
-        `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`,
-    )
+    .map((sheet, i) => {
+      const folder = sheet.chartsheet === true ? "chartsheets" : "worksheets";
+      const type = sheet.chartsheet === true ? CHARTSHEET_RELATIONSHIP : WORKSHEET_RELATIONSHIP;
+      return `<Relationship Id="rId${i + 1}" Type="${type}" Target="${folder}/sheet${i + 1}.xml"/>`;
+    })
     .join("");
   files["xl/_rels/workbook.xml.rels"] = strToU8(
     `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${relElements}</Relationships>`,
@@ -204,3 +215,5 @@ function addTables(
 }
 
 const TABLE_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/table";
+const WORKSHEET_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
+const CHARTSHEET_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartsheet";

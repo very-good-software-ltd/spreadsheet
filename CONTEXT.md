@@ -365,7 +365,7 @@ Unlike a pivot's source, a chart reference can carry `#REF!`, because it is a fo
 
 Charts are found through the content types rather than by following relationships.
 A chart hangs off a drawing, and a drawing off either a worksheet or a chartsheet, but the ranges a chart reads can name any sheet at all.
-So walking out from the sheet that moved would miss a chart drawn anywhere else, and would miss a chart on its own tab entirely.
+So walking out from the sheet that moved would miss a chart drawn anywhere else, and would miss one on a chart sheet entirely.
 A chart is also the only part positioned by row that can read more than one sheet, so it is the only one given more than one move.
 
 A chart carries its own copy of the values each series read, which we do not rewrite, and unlike a pivot cache it has no `refreshOnLoad` to ask for a rebuild with.
@@ -532,7 +532,8 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   So the design decisions that only Excel could settle are settled, and what remains is coverage rather than doubt: the generated template has no charts or pivot tables, so the two fixtures saved from Excel and kept in `test/fixtures` cover those instead.
   `npm run manual-check` builds the file to try it with.
 - **What a written file does not update.**
-  A chart pointing at a fixed range does not extend to cover rows appended below it, since appending moves no rows for the range to follow. Filling a region does move them, and a chart's series follows.
+  A chart pointing at a fixed range does not extend to cover rows appended below it, since appending moves no rows for the range to follow.
+  Filling a region does move them, and a chart's series follows.
   An Excel Table written by name does now grow, unless it has a totals row.
   One filled by row number through `writeRows` or `appendRows` still does not, because nothing in that call says the rows belong to it.
   A digitally signed workbook has its signature invalidated by any modification, which is inherent and not fixable.
@@ -561,11 +562,15 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   Settling it needs a file with a waterfall chart in it, the same missing-file problem the pivot and chart work both had.
   Until then the choice is between refusing a save when the package holds one and leaving it stale, and that is not decided.
 
-- **A chartsheet is listed as a worksheet (open).**
-  `readWorkbook` takes every `<sheet>` in the workbook part, so a chart on its own tab comes back from `worksheets` as though it held cells.
-  `test/fixtures/chart-template.xlsx` is the first file here with one, and filling it is unaffected, since nothing writes to that sheet.
-  What is wrong is the reading side: `openRows` on it reads a part with no rows in it, and an editor could be asked for it.
-  Found while doing the chart work and left alone, since it is a reader question rather than a write path one.
+- **A chartsheet is listed as a worksheet (resolved by leaving it out).**
+  It used to be, because `readWorkbook` took every `<sheet>` in the workbook part, so a chart sheet came back from `worksheets` as though it held cells.
+  `worksheets` now means the sheets that hold rows, which is the same split Excel's own object model makes between its `Sheets` and its `Worksheets`, so a chart sheet is not among them and asking for one by name says it was not found.
+  The alternative was to keep it and mark it, which we turned down because `worksheets` would then no longer say what you can read and every caller would carry the check.
+  The cost is that a caller addressing a sheet by position sees the positions after a chart sheet move up by one.
+  Which kind a sheet is shows nowhere on the `<sheet>` element, only in the type of the relationship it points through, so that is what decides it, and only a type that positively names something other than a worksheet drops one.
+  A relationship that is missing or names no type has said nothing, and losing a sheet we cannot place would be worse than failing when its rows are asked for.
+  The whole sheet order is still read, because two things count every sheet and not only the worksheets: a defined name's scope, which is a position in that order, and the sheet ids, since an added worksheet must not take one a chart sheet already holds.
+  That is why `WorkbookInfo` carries `highestSheetId` rather than letting the editor take the largest id it can see.
 
 - **Reading by name (parked).**
   The writer parses defined names anyway, so exposing the resolved names and their extents to a reader is a small surface for free parsing.

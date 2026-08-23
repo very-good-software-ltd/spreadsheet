@@ -30,6 +30,13 @@ const RESERVED_NAME_PREFIX = "_xlnm.";
 // keep it out of the tab strip, and veryHidden also hides it from the unhide menu.
 const HIDDEN_STATES: ReadonlySet<string> = new Set(["hidden", "veryHidden"]);
 
+// Not every sheet is a worksheet. A chart drawn on a sheet of its own is a
+// chartsheet, and a dialog sheet is another, both listed among the sheets exactly
+// like a worksheet and neither holding a row. Which it is shows only in the
+// relationship the sheet points through, so one whose relationship names anything
+// but a worksheet is left out rather than handed over as one.
+const WORKSHEET_RELATIONSHIP = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet";
+
 export interface WorksheetRef {
   readonly name: string;
   readonly path: string;
@@ -50,7 +57,14 @@ export interface DefinedNameRef {
 }
 
 export interface WorkbookInfo {
+  /** The sheets that hold rows, in document order. A chart sheet is not among them. */
   readonly worksheets: readonly WorksheetRef[];
+
+  /**
+   * The largest `sheetId` any sheet carries, chart sheets included, so an added
+   * worksheet can take one nothing else already has.
+   */
+  readonly highestSheetId: number;
 
   /** Every name the author gave a place in the workbook, in the order they appear. */
   readonly definedNames: readonly DefinedNameRef[];
@@ -67,13 +81,17 @@ interface CollectedName {
   target: string;
 }
 
+interface SheetRef extends WorksheetRef {
+  readonly holdsRows: boolean;
+}
+
 export async function readWorkbook(archive: ZipArchive, xml: XmlReader): Promise<WorkbookInfo> {
   if (!archive.has(WORKBOOK_PART)) {
     throw new Error(`Not a valid xlsx file: missing ${WORKBOOK_PART}`);
   }
 
   const relationships = await readWorkbookRelationships(archive, xml);
-  const worksheets: WorksheetRef[] = [];
+  const sheets: SheetRef[] = [];
   const collected: CollectedName[] = [];
   let collecting: CollectedName | undefined;
   let date1904 = false;
@@ -113,10 +131,16 @@ export async function readWorkbook(archive: ZipArchive, xml: XmlReader): Promise
           continue;
         }
         const relId = event.attributes[Attribute.RelationshipId];
-        const path = relId === undefined ? undefined : relationships.get(relId);
+        const relationship = relId === undefined ? undefined : relationships.get(relId);
         const hidden = HIDDEN_STATES.has(event.attributes[Attribute.State] ?? "");
         const sheetId = Number(event.attributes[Attribute.SheetId] ?? "0");
-        worksheets.push({ name, path: path ?? "", hidden, sheetId });
+        // Only a relationship that positively says the sheet is something else
+        // drops it. One that is missing, or that names no type, has said nothing,
+        // and a sheet we cannot place is better failing when its rows are asked for
+        // than disappearing in silence.
+        const relationshipType = relationship?.type ?? "";
+        const holdsRows = relationshipType === "" || relationshipType === WORKSHEET_RELATIONSHIP;
+        sheets.push({ name, path: relationship?.target ?? "", hidden, sheetId, holdsRows });
       }
     }
   }
@@ -127,9 +151,15 @@ export async function readWorkbook(archive: ZipArchive, xml: XmlReader): Promise
   // `localSheetId="3"` means `Fuel Input`, the fourth sheet, whose `sheetId` is 12.
   const definedNames = collected.map((defined) => ({
     name: defined.name,
-    scope: defined.scopePosition === undefined ? undefined : worksheets[defined.scopePosition]?.name,
+    scope: defined.scopePosition === undefined ? undefined : sheets[defined.scopePosition]?.name,
     target: parseDefinedName(defined.target),
   }));
 
-  return { worksheets, definedNames, date1904, relationshipIds: [...relationships.keys()] };
+  return {
+    worksheets: sheets.filter((sheet) => sheet.holdsRows),
+    highestSheetId: Math.max(0, ...sheets.map((sheet) => sheet.sheetId)),
+    definedNames,
+    date1904,
+    relationshipIds: [...relationships.keys()],
+  };
 }

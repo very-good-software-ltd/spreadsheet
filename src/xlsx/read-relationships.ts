@@ -64,10 +64,13 @@ export async function readRelationships(
   return relationships;
 }
 
-export async function readWorkbookRelationships(archive: ZipArchive, xml: XmlReader): Promise<Map<string, string>> {
+export async function readWorkbookRelationships(
+  archive: ZipArchive,
+  xml: XmlReader,
+): Promise<Map<string, Relationship>> {
   const relationships = await readRelationships(archive, xml, WORKBOOK_PART);
 
-  return new Map(relationships.map((relationship) => [relationship.id, relationship.target]));
+  return new Map(relationships.map((relationship) => [relationship.id, relationship]));
 }
 
 // A part's relationships live beside it, in a `_rels` folder, under the part's own

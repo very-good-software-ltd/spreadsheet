@@ -34,7 +34,7 @@ describe("readChartPaths", () => {
     expect(charts).toEqual(["xl/charts/chart1.xml", "xl/charts/chart2.xml"]);
   });
 
-  // A chart on its own tab hangs off a chartsheet rather than off a worksheet, so
+  // A chart sheet hangs off a chartsheet part rather than off a worksheet, so
   // walking out from the sheet whose rows moved would never reach it.
   it("finds a chart no worksheet points at", async () => {
     const charts = await chartsIn([["/xl/charts/chart1.xml", CHART]]);

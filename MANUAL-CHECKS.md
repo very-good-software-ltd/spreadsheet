@@ -85,7 +85,7 @@ That matters because a pivot asks for a rebuild with `refreshOnLoad` and a chart
 No prompt appeared first, so it is a silent guarantee rather than something a caller has to warn anyone about.
 
 A chart part we rewrote rather than copied is accepted too, the same answer the VML part gave.
-The chart on `Data` came down with the rows and still sits one empty row below Total, the one on `Dashboard` followed although no row on that sheet moved, and the one on its own tab followed although no worksheet points at it.
+The chart on `Data` came down with the rows and still sits one empty row below Total, the one on `Dashboard` followed although no row on that sheet moved, and the one on the chart sheet followed although no worksheet points at it.
 
 
 ## Start here
@@ -272,7 +272,8 @@ Not failures, so do not chase them:
 
 - An Excel Table does not grow to cover appended rows.
 - A chart pointing at a fixed range does not extend to cover them either.
-  A chart's series follows a region, because filling one moves rows. Appending moves none, so there is nothing for it to follow.
+  A chart's series follows a region, because filling one moves rows.
+  Appending moves none, so there is nothing for it to follow.
 - A digital signature is invalidated.
   Any modification does that, and nothing can be done about it.
 - A rewritten part is not byte-identical to its source, only equivalent.

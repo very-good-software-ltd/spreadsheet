@@ -7,6 +7,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- A chart sheet, the kind Excel makes when you move a chart onto a sheet of its own, is no longer listed as a worksheet.
+  It came back from `worksheets` and `worksheetNames` as though it held cells, and asking it for its rows read a part that has none instead of telling you it is not a worksheet.
+  Asking for one by name now says it was not found.
+  If you address a sheet by position rather than by name, the positions after a chart sheet have moved up by one.
+
+
 ## [0.5.0] - 2026-08-23
 
 ### Changed
@@ -18,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   A chart carries its own copy of the values it read, which we do not rewrite.
   Excel plots from the range instead, so the figures are right on open with nothing to refresh.
   A reader that plots the copy shows the figures from before your fill.
+
 
 ### Fixed
 

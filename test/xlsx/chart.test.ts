@@ -112,7 +112,7 @@ describe("a chart in a filled workbook", () => {
 // Written by real Excel, because no library we depend on can write a chart. Its
 // `Data` sheet holds five rows under a header, `Movements` names the five, and
 // three charts read them: one drawn below the region on `Data`, one on the
-// `Dashboard` sheet, and one on its own tab, which no worksheet points at.
+// `Dashboard` sheet, and one on a chart sheet, which no worksheet points at.
 const TEMPLATE = new Uint8Array(readFileSync(new URL("../fixtures/chart-template.xlsx", import.meta.url)));
 
 const CHARTS = ["xl/charts/chart1.xml", "xl/charts/chart2.xml", "xl/charts/chart3.xml"];
