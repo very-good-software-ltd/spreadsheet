@@ -95,6 +95,16 @@ const EXPECTATIONS = [
   ],
   ["Summary!E3", "Still says 'keep me'", "A row that stayed kept everything on it"],
   [
+    "Summary!A5",
+    "Total is red, not black",
+    "A conditional format below the region came up with the rows and its rule came with it. Black means the range moved and the rule stayed behind, reading a row that is now empty",
+  ],
+  [
+    "Summary!C5, type 50 and press Enter",
+    "Accepted. Then type 500, and Excel refuses it",
+    "A data validation's bounds are formulas too, and its upper one is the total. Refusing 50 as well means the bound stayed behind on an empty cell",
+  ],
+  [
     "The image on Summary",
     "Starts on row 7, with exactly one empty row between it and Total",
     "A picture anchored below the region came up with the rows. Three empty rows means it did not move, and a chart is anchored the same way",
@@ -225,6 +235,24 @@ async function buildTemplate() {
   // cached result is wrong for the data about to arrive, as everywhere else here.
   summary.getCell("B7").value = { formula: "SUM(B3:B5)", result: 0 };
   summary.getCell("B7").font = { bold: true };
+  // A rule below the region, naming a cell that moves. Both halves have to follow
+  // the rows, the range it covers and the reference inside the rule, and the colour
+  // is what says whether the second one did. Left where it was the rule reads B7,
+  // which is empty once the total has come up, so the word comes out unhighlighted.
+  summary.addConditionalFormatting({
+    ref: "A7",
+    rules: [{ type: "expression", formulae: ["$B7>0"], style: { font: { color: { argb: "FFCC0000" } } } }],
+  });
+  // The same question asked of a data validation, whose bounds are formulas of
+  // their own. Its upper bound is the total, so a bound left behind bounds the cell
+  // by an empty one and refuses everything above nothing.
+  summary.getCell("C7").dataValidation = {
+    type: "whole",
+    operator: "between",
+    formulae: ["0", "$B7"],
+    showErrorMessage: true,
+    error: "Must be between 0 and the total",
+  };
   for (const [row, month] of [
     [3, "January"],
     [4, "February"],

@@ -115,7 +115,7 @@ Work down those sheets, then come back here for the things they cannot cover.
 `exceljs` writes the template, and it can write neither a chart nor a pivot table.
 Both are covered by committed fixtures instead, which is what `chart-filled.xlsx` and `pivot-filled.xlsx` are for.
 
-What no fixture here covers is a template someone actually uses, with data validation, print setup and macros in it.
+What no fixture here covers is a template someone actually uses, with print setup and macros in it.
 To check one, put it at `manual-check/template.xlsx` and run the script again.
 It uses your file instead of generating one.
 Then check:
@@ -233,6 +233,28 @@ The part positioning the boxes is VML, a legacy format, and we rewrite it rather
 That rewrite loses self-closing tag spelling the way every other rewritten part does, and whether Excel minds is exactly what this check answers.
 It does not, as of 2026-08-22, so what is left is a regression check rather than an open question.
 A comment appearing on the wrong row, or a marker with no box behind it, means the two parts disagree.
+
+
+## Why the Summary sheet carries a conditional format
+
+A conditional format and a data validation are the two things on a sheet whose rule is a formula held as element text rather than as an attribute, and everything else out there is an attribute.
+So they are the only pair that can half move: the range follows the rows while the rule stays behind naming the old ones.
+That went unnoticed until 2026-08-23 and is fixed, and this is what keeps it fixed in front of Excel rather than only in a test.
+
+The format sits on `A7`, the `Total` label, and its rule reads `$B7>0`, which is the total beside it.
+The fill takes two rows out, so both come up to row 5 and the rule has to come to read `$B5>0`.
+Red is the whole answer.
+Left behind, the rule still reads `B7`, which is empty once the total has moved, so nothing is greater than zero and the word comes out black.
+There is nothing to open and nothing to compare against a number you have to remember.
+
+The validation on `C7` asks the same question of the other element.
+Its bounds are `0` and `$B7`, the total again, so after the fill it should allow anything up to 120 at `C5`.
+Typing 50 and having it accepted is the check, and typing 500 and having it refused is what proves the validation is live rather than simply gone.
+A bound left behind points at an empty cell, so 50 is refused too.
+
+The `Report` sheet has a conditional format as well, and it answers a different question.
+Its rule is `greaterThan 10`, a literal with no reference in it, on a sheet where no row moves.
+That one only shows that a format survives a fill at all.
 
 
 ## Why the pivot check turns on a region called West
