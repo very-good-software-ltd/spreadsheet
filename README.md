@@ -379,7 +379,8 @@ async function invoiceLines(): Promise<(string | number)[][]> {
     ["Expenses", 1, 240],
     ["Support", 3, 180],
   ];
-}```
+}
+```
 
 <!-- /example -->
 

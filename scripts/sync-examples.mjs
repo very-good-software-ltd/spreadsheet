@@ -50,9 +50,15 @@ if (malformed !== undefined) {
   process.exit(1);
 }
 
+// The newline before the closing fence is written rather than taken from the tail
+// the pattern matched. The pattern has to treat it as optional so an empty
+// placeholder matches, which means a block whose newline has gone missing matches
+// too, and replaying the tail would copy that break straight back out. The README
+// would then render every following section inside the code block, and the check
+// would call it up to date, since the output equals the input.
 const after = before.replace(region, (_match, head, name, _body, tail) => {
   const code = readFileSync(join(examplesDir, name), "utf8").replace(/\n+$/, "");
-  return `${head}${code}${tail}`;
+  return `${head}${code}\n${tail.replace(/^\n/, "")}`;
 });
 
 if (after === before) {
