@@ -262,6 +262,10 @@ Its bounds are `0` and `$B7`, the total again, so after the fill it should allow
 Typing 50 and having it accepted is the check, and typing 500 and having it refused is what proves the validation is live rather than simply gone.
 A bound left behind points at an empty cell, so 50 is refused too.
 
+Unlike the colour, this one cannot be seen.
+A validation shows nothing until you type into it, so the cell is bordered, the cell beside it points at it, and selecting it pops Excel's own input message saying what to type and what it means.
+Without that you have to already know which cell to click, which is not a check, it is a question you have to ask someone.
+
 The `Report` sheet has a conditional format as well, and it answers a different question.
 Its rule is `greaterThan 10`, a literal with no reference in it, on a sheet where no row moves.
 That one only shows that a format survives a fill at all.

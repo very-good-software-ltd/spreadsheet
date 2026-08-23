@@ -100,9 +100,9 @@ const EXPECTATIONS = [
     "A conditional format below the region came up with the rows and its rule came with it. Black means the range moved and the rule stayed behind, reading a row that is now empty",
   ],
   [
-    "Summary!C5, type 50 and press Enter",
-    "Accepted. Then type 500, and Excel refuses it",
-    "A data validation's bounds are formulas too, and its upper one is the total. Refusing 50 as well means the bound stayed behind on an empty cell",
+    "Summary!C5, the bordered cell left of the arrow on row 5",
+    "Type 50, accepted. Type 500, Excel refuses it",
+    "A data validation's bounds are formulas too, and its upper one is the total beside it. Refusing 50 as well means the bound stayed behind on a cell that is now empty",
   ],
   [
     "The image on Summary",
@@ -246,11 +246,18 @@ async function buildTemplate() {
   // The same question asked of a data validation, whose bounds are formulas of
   // their own. Its upper bound is the total, so a bound left behind bounds the cell
   // by an empty one and refuses everything above nothing.
+  // Labelled beside itself, because a validation shows nothing until you type into
+  // it, and a check you cannot find on the sheet is not a check.
+  summary.getCell("D7").value = "<- type 50 here, then 500";
+  summary.getCell("C7").border = BORDERED;
   summary.getCell("C7").dataValidation = {
     type: "whole",
     operator: "between",
     formulae: ["0", "$B7"],
     showErrorMessage: true,
+    showInputMessage: true,
+    promptTitle: "Data validation check",
+    prompt: "50 should be accepted and 500 refused. Both refused means the upper bound stayed behind.",
     error: "Must be between 0 and the total",
   };
   for (const [row, month] of [
