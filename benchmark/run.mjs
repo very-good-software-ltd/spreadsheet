@@ -17,6 +17,11 @@
 // Pass --cap=150 to run the workers under a heap cap. That is the measure worth
 // quoting for memory, since peak RSS also counts memory the runtime has not given
 // back to the OS, and it shows which libraries run out.
+//
+// A worker gets 120 seconds before it is killed and reported as timed out. Pass
+// --timeout=600 to allow longer, or --timeout=0 to wait however long it takes. The
+// limit is there so one library that grinds cannot hold up the whole table, and it
+// changes nothing about what any of them are given to work with.
 import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -55,11 +60,19 @@ const writer = fileURLToPath(new URL("./write-file.mjs", import.meta.url));
 
 const DEFAULT_ROW_COUNT = 1_000_000;
 
+// How long a single worker gets before it is killed. Long enough that a slow but
+// finishing run is never cut short, since the slowest legitimate one measured here
+// is around 20 seconds.
+const DEFAULT_TIMEOUT_SECONDS = 120;
+
 const args = process.argv.slice(2);
 // Last one wins, so a value passed on the command line overrides the one the npm
 // script already supplies.
 const capArg = args.findLast((arg) => arg.startsWith("--cap="));
 const cap = capArg ? Number(capArg.slice("--cap=".length)) : undefined;
+
+const timeoutArg = args.findLast((arg) => arg.startsWith("--timeout="));
+const timeoutSeconds = timeoutArg ? Number(timeoutArg.slice("--timeout=".length)) : DEFAULT_TIMEOUT_SECONDS;
 
 const writeArg = args.findLast((arg) => arg === "--write" || arg.startsWith("--write="));
 const readArg = args.some((arg) => arg === "--read");
@@ -100,9 +113,18 @@ if (reading && targets.length === 0 && rowCounts.length === 0) {
 
 function run(worker, library, mode, target) {
   const nodeArgs = [...(cap ? [`--max-old-space-size=${cap}`] : []), worker, library, mode, String(target)];
-  const result = spawnSync(process.execPath, nodeArgs, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+  const result = spawnSync(process.execPath, nodeArgs, {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+    ...(timeoutSeconds > 0 ? { timeout: timeoutSeconds * 1000 } : {}),
+  });
   if (result.status === 0) {
     return { ok: true, ...JSON.parse(result.stdout.trim().split("\n").at(-1)) };
+  }
+  // Checked before anything else, since a worker killed part way through can leave
+  // whatever it had already written to stderr behind to be read as a cause.
+  if (result.error?.code === "ETIMEDOUT") {
+    return { ok: false, status: `timed out after ${timeoutSeconds}s` };
   }
   const ranOutOfMemory = /heap out of memory/i.test(result.stderr) || result.signal === "SIGABRT";
   if (ranOutOfMemory) {
