@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,47 +18,44 @@ const check = process.argv.includes("--check");
 
 const anchor = /<!-- example: ([\w.-]+) -->/g;
 
-// The head and tail are captured verbatim, including any blank lines a markdown
-// formatter puts around the anchors, so only the code between them is replaced.
+// Only the two anchors are matched. Everything between them is thrown away and
+// written again, fences included, so nothing in the block is depended on to be
+// correct before the run. A fence that is missing, duplicated or run into the last
+// line of code is replaced rather than having to be matched.
 //
-// Two things here are load-bearing, both to stop one block's replacement running
-// into the next and deleting the prose in between.
-//
-// The newline before the closing fence is optional, so an empty placeholder still
-// matches. The head has already eaten the newline after the opening fence, so
-// requiring another one means an empty block cannot match at its own position.
-//
-// And the body cannot contain a closing anchor, so a block missing its fence
-// fails to match rather than swallowing everything up to the next block's anchor.
-// A body that reaches too far is then caught below instead of being written out.
-const region =
-  /(<!-- example: ([\w.-]+) -->\s*```ts\n)((?:(?!<!-- \/example -->)[\s\S])*?)(\n?```\s*<!-- \/example -->)/g;
+// The body cannot contain an anchor of either kind, so a block missing its closing
+// anchor fails to match rather than swallowing the prose up to the next block.
+const region = /<!-- example: ([\w.-]+) -->\n(?:(?!<!-- example:|<!-- \/example -->)[\s\S])*?<!-- \/example -->/g;
 
 const before = readFileSync(readmePath, "utf8");
 
 // A block the pattern cannot match would otherwise be skipped in silence, and
 // the README would keep whatever stale code is in it.
 const declared = [...before.matchAll(anchor)].map(([, name]) => name);
-const matched = [...before.matchAll(region)].map((match) => match[2]);
+const matched = [...before.matchAll(region)].map((match) => match[1]);
 // Only the first mismatch is reported. Past that the two lists no longer line up,
 // so every later name would be named whether its own block is fine or not.
 const malformed = declared.find((name, index) => matched[index] !== name);
 
 if (malformed !== undefined) {
   console.error(`examples: malformed block in README.md for ${malformed}.`);
-  console.error("It needs an opening ```ts fence, a closing ``` fence, then <!-- /example -->.");
+  console.error("It needs an opening <!-- example: name --> anchor and a closing <!-- /example --> one.");
   process.exit(1);
 }
 
-// The newline before the closing fence is written rather than taken from the tail
-// the pattern matched. The pattern has to treat it as optional so an empty
-// placeholder matches, which means a block whose newline has gone missing matches
-// too, and replaying the tail would copy that break straight back out. The README
-// would then render every following section inside the code block, and the check
-// would call it up to date, since the output equals the input.
-const after = before.replace(region, (_match, head, name, _body, tail) => {
+// An example nobody put an anchor in for is type-checked and then never seen, so
+// adding one and forgetting to place it would go unnoticed.
+const unplaced = readdirSync(examplesDir).filter((name) => !declared.includes(name));
+
+if (unplaced.length > 0) {
+  console.error(`examples: no anchor in README.md for ${unplaced.join(", ")}.`);
+  console.error("Add <!-- example: name --> and <!-- /example --> where it should appear.");
+  process.exit(1);
+}
+
+const after = before.replace(region, (_match, name) => {
   const code = readFileSync(join(examplesDir, name), "utf8").replace(/\n+$/, "");
-  return `${head}${code}\n${tail.replace(/^\n/, "")}`;
+  return `<!-- example: ${name} -->\n\n\`\`\`ts\n${code}\n\`\`\`\n\n<!-- /example -->`;
 });
 
 if (after === before) {
