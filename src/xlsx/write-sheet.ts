@@ -4,7 +4,7 @@ import { writeXmlEvent, XML_DECLARATION } from "../xml/write-xml";
 import type { XmlEvent } from "../xml/xml-reader";
 import { dateToSerial } from "./date";
 import type { RowShift } from "./shift-formula";
-import { movedSheetEvent, movedSourceRow, pointsAtOrBelow } from "./shift-sheet";
+import { insideFormula, movedSheetEvent, movedSourceRow, pointsAtOrBelow } from "./shift-sheet";
 
 const Element = {
   SheetData: "sheetData",
@@ -570,8 +570,25 @@ async function* withRegion(pieces: AsyncIterable<SheetPiece>, plan: SheetWritePl
   if (shift !== undefined) {
     region.moved(shift);
   }
+
+  // A conditional format's rule and a data validation's bounds hold their formula
+  // as text, so what has been seen carries from one event to the next.
+  let inFormula = false;
+  const move = (piece: SheetPiece): SheetPiece | undefined => {
+    if (shift === undefined) {
+      return piece;
+    }
+
+    const moved = movedPiece(piece, shift, inFormula);
+    if (piece.kind !== "row" && piece.kind !== "regionRow") {
+      inFormula = insideFormula(piece.event, inFormula);
+    }
+
+    return moved;
+  };
+
   for (const piece of above) {
-    const moved = shift === undefined ? piece : movedPiece(piece, shift);
+    const moved = move(piece);
     if (moved !== undefined) {
       yield moved;
     }
@@ -624,7 +641,7 @@ async function* withRegion(pieces: AsyncIterable<SheetPiece>, plan: SheetWritePl
   }
 
   if (overshot !== undefined) {
-    const moved = shift === undefined ? overshot : movedPiece(overshot, shift);
+    const moved = move(overshot);
     if (moved !== undefined) {
       yield moved;
     }
@@ -636,14 +653,14 @@ async function* withRegion(pieces: AsyncIterable<SheetPiece>, plan: SheetWritePl
       return;
     }
 
-    const moved = shift === undefined ? next.value : movedPiece(next.value, shift);
+    const moved = move(next.value);
     if (moved !== undefined) {
       yield moved;
     }
   }
 }
 
-function movedPiece(piece: SheetPiece, shift: RowShift): SheetPiece | undefined {
+function movedPiece(piece: SheetPiece, shift: RowShift, inFormula: boolean): SheetPiece | undefined {
   if (piece.kind === "row") {
     const row = movedSourceRow(piece.row, shift);
     return row === undefined ? undefined : { kind: "row", row };
@@ -652,7 +669,7 @@ function movedPiece(piece: SheetPiece, shift: RowShift): SheetPiece | undefined 
     return piece;
   }
 
-  return { kind: piece.kind, event: movedSheetEvent(piece.event, shift) };
+  return { kind: piece.kind, event: movedSheetEvent(piece.event, shift, inFormula) };
 }
 
 function eventsOf(piece: SheetPiece): XmlEvent[] {

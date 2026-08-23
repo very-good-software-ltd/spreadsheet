@@ -131,8 +131,33 @@ export function movedSourceRow(row: SourceRow, shift: RowShift): SourceRow | und
   };
 }
 
-/** One event from outside the rows, with any reference on it moved. */
-export function movedSheetEvent(event: XmlEvent, shift: RowShift): XmlEvent {
+/**
+ * Whether the event after this one sits in a formula's text, given whether this
+ * one did. Fed back in on each event of a worksheet outside its rows.
+ */
+export function insideFormula(event: XmlEvent, wasInside: boolean): boolean {
+  if (event.type === "open") {
+    return FORMULA_ELEMENTS.has(event.name);
+  }
+  if (event.type === "close") {
+    return false;
+  }
+
+  return wasInside;
+}
+
+/**
+ * One event from outside the rows, with any reference on it moved.
+ *
+ * Text is only moved when `inFormula` says it is a formula's, because the other
+ * text out here is a page header or footer, free text that can read like a
+ * reference and would be mangled by moving it.
+ */
+export function movedSheetEvent(event: XmlEvent, shift: RowShift, inFormula = false): XmlEvent {
+  if (event.type === "text") {
+    return inFormula ? { ...event, text: shiftFormula(event.text, shift, shift.sheet) } : event;
+  }
+
   if (event.type !== "open") {
     return event;
   }

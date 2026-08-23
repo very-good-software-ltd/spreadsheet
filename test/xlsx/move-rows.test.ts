@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RowShift } from "../../src/xlsx/shift-formula";
-import { movedSheetEvent, movedSourceRow, pointsAtOrBelow } from "../../src/xlsx/shift-sheet";
+import { insideFormula, movedSheetEvent, movedSourceRow, pointsAtOrBelow } from "../../src/xlsx/shift-sheet";
 import type { SourceRow } from "../../src/xlsx/write-sheet";
 import type { XmlEvent } from "../../src/xml/xml-reader";
 
@@ -75,10 +75,24 @@ describe("movedSheetEvent", () => {
     });
   });
 
-  it("leaves text and closing tags as they are", () => {
+  it("leaves closing tags as they are", () => {
+    const close: XmlEvent = { type: "close", name: "mergeCell" };
+
+    expect(movedSheetEvent(close, INSERT)).toBe(close);
+  });
+
+  // A page header is free text that can read like a reference, so text out here is
+  // only moved where the caller says it is a formula's.
+  it("leaves text outside a formula as it is", () => {
     const text: XmlEvent = { type: "text", text: "C12" };
 
-    expect(movedSheetEvent(text, INSERT)).toBe(text);
+    expect(movedSheetEvent(text, INSERT, false)).toBe(text);
+  });
+
+  it("moves the rows a formula outside the rows names", () => {
+    const text: XmlEvent = { type: "text", text: "C12>0" };
+
+    expect(movedSheetEvent(text, INSERT, true)).toEqual({ type: "text", text: "C14>0" });
   });
 
   it("moves every range of a conditional format that covers more than one", () => {
@@ -118,6 +132,28 @@ describe("movedSheetEvent", () => {
     const event: XmlEvent = { type: "open", name: "extLst", attributes: {} };
 
     expect(() => movedSheetEvent(event, INSERT)).toThrow("holds an extension list");
+  });
+});
+
+describe("insideFormula", () => {
+  it("is inside from a formula's opening tag until its closing one", () => {
+    const opened = insideFormula({ type: "open", name: "formula", attributes: {} }, false);
+
+    expect(opened).toBe(true);
+    expect(insideFormula({ type: "text", text: "C12" }, opened)).toBe(true);
+    expect(insideFormula({ type: "close", name: "formula" }, opened)).toBe(false);
+  });
+
+  // A conditional format's rule spells it `formula` and a data validation spells
+  // its bounds `formula1` and `formula2`, so all three have to count.
+  it("counts a data validation's bounds as formulas too", () => {
+    for (const name of ["formula", "formula1", "formula2"]) {
+      expect(insideFormula({ type: "open", name, attributes: {} }, false)).toBe(true);
+    }
+  });
+
+  it("is not inside for any other element", () => {
+    expect(insideFormula({ type: "open", name: "cfRule", attributes: {} }, false)).toBe(false);
   });
 });
 

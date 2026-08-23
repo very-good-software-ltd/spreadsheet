@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A conditional format and a data validation now follow your rows whole, rule and all.
+  The range each one covers moved with the rows, as it always did, but the formula inside it did not, so a rule ended up colouring one row on the strength of another and a validation went on bounding itself by rows that had moved.
+  A format written over a region you fill was affected, and so was one anywhere below it.
+  Only the rule went wrong, never your data, so a file you already produced shows the right numbers with the wrong rows highlighted.
 - A chart sheet, the kind Excel makes when you move a chart onto a sheet of its own, is no longer listed as a worksheet.
   It came back from `worksheets` and `worksheetNames` as though it held cells, and asking it for its rows read a part that has none instead of telling you it is not a worksheet.
   Asking for one by name now says it was not found.

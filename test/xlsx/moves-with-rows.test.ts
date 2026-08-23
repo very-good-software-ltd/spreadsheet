@@ -41,6 +41,27 @@ function commentRefsIn(bytes: Uint8Array): (string | undefined)[] {
   return [...comments.matchAll(/<comment ref="([^"]+)"/g)].map((match) => match[1]);
 }
 
+// Each conditional format on the sheet, as the range it covers and the text of
+// its one rule, so both halves of a move can be read at once.
+function conditionalFormatsIn(bytes: Uint8Array): [string, string][] {
+  const sheet = strFromU8(unzipSync(bytes)["xl/worksheets/sheet1.xml"] ?? new Uint8Array());
+
+  return [...sheet.matchAll(/<conditionalFormatting sqref="([^"]+)">.*?<formula>(.*?)<\/formula>/g)].map((match) => [
+    match[1] ?? "",
+    (match[2] ?? "").replaceAll("&gt;", ">"),
+  ]);
+}
+
+// A data validation's range and both of its bounds, which are formulas of their
+// own and move like any other.
+function dataValidationsIn(bytes: Uint8Array): [string, string, string][] {
+  const sheet = strFromU8(unzipSync(bytes)["xl/worksheets/sheet1.xml"] ?? new Uint8Array());
+
+  return [
+    ...sheet.matchAll(/<dataValidation [^>]*sqref="([^"]+)"><formula1>(.*?)<\/formula1><formula2>(.*?)<\/formula2>/g),
+  ].map((match) => [match[1] ?? "", match[2] ?? "", match[3] ?? ""]);
+}
+
 // The cell a comment's box hangs from, read back as a sheet row, where the VML
 // counts from zero.
 function commentCellRowsIn(bytes: Uint8Array): number[] {
@@ -118,5 +139,51 @@ describe("what moves when a worksheet's rows move", () => {
     });
 
     expect(commentRefsIn(await writeThreeRowsInto(bytes))).toEqual(["B1"]);
+  });
+
+  it("grows a conditional format covering the region to cover the rows written", async () => {
+    const bytes = await templateWith((_workbook, sheet) => {
+      sheet.addConditionalFormatting({
+        ref: "B3:B5",
+        rules: [{ type: "cellIs", operator: "greaterThan", formulae: ["1"], priority: 1, style: {} }],
+      });
+    });
+
+    expect(conditionalFormatsIn(await writeThreeRowsInto(bytes))).toEqual([["B3:B6", "1"]]);
+  });
+
+  it("moves a conditional format below the rows that move, along with the rows its rule names", async () => {
+    const bytes = await templateWith((_workbook, sheet) => {
+      sheet.addConditionalFormatting({
+        ref: "B7",
+        rules: [{ type: "expression", formulae: ["B7>0"], priority: 1, style: {} }],
+      });
+    });
+
+    expect(conditionalFormatsIn(await writeThreeRowsInto(bytes))).toEqual([["B8", "B8>0"]]);
+  });
+
+  it("moves the rows a data validation's bounds name, along with the range it covers", async () => {
+    const bytes = await templateWith((_workbook, sheet) => {
+      sheet.getCell("B7").dataValidation = {
+        type: "whole",
+        operator: "between",
+        formulae: ["B5", "B5+10"],
+        showErrorMessage: true,
+      };
+    });
+
+    expect(dataValidationsIn(await writeThreeRowsInto(bytes))).toEqual([["B8", "B6", "B6+10"]]);
+  });
+
+  it("leaves a conditional format above the rows that move where it is", async () => {
+    const bytes = await templateWith((_workbook, sheet) => {
+      sheet.addConditionalFormatting({
+        ref: "B1",
+        rules: [{ type: "expression", formulae: ["B1>0"], priority: 1, style: {} }],
+      });
+    });
+
+    expect(conditionalFormatsIn(await writeThreeRowsInto(bytes))).toEqual([["B1", "B1>0"]]);
   });
 });

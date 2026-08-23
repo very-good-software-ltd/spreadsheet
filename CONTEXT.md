@@ -316,7 +316,7 @@ The conclusion changes because there is a third option we did not consider: do t
 So a save either produces a correct file or throws naming what stopped it.
 Never a file that is quietly wrong.
 
-In scope to move: rows and cells, merged ranges, conditional formatting and data validation ranges, hyperlinks, autofilter, frozen panes, row breaks, table extents, defined names, formula references on the sheet and on every other sheet pointing at it, the anchors a drawing places its shapes by, the cell each comment belongs to along with the box it appears in, the range a pivot table reads along with the block it is drawn in, and the range each chart series reads.
+In scope to move: rows and cells, merged ranges, conditional formatting and data validation ranges along with the formulas their rules and bounds are written as, hyperlinks, autofilter, frozen panes, row breaks, table extents, defined names, formula references on the sheet and on every other sheet pointing at it, the anchors a drawing places its shapes by, the cell each comment belongs to along with the box it appears in, the range a pivot table reads along with the block it is drawn in, and the range each chart series reads.
 
 Refused, naming the thing: a formula we cannot rewrite with confidence.
 A shape standing only on rows that are going away, since nothing is left to hang it from and dropping a chart in silence is worse than refusing.
@@ -548,6 +548,14 @@ Now it moves, so a table grows whatever is under it, and the advice to put a tot
   Still missing: conditional formatting, which `exceljs` does write but not in a template that exercises the write path.
   Excel offering to repair a file is the failure that matters most and no library round-trip catches it.
   That is a manual check, listed in `MANUAL-CHECKS.md`.
+- **Text outside the rows was moved by its tags alone (resolved).**
+  A conditional format's rule and a data validation's bounds are formulas held as element text rather than as attributes, and everything outside a worksheet's rows was moved by rewriting attributes only.
+  So the range a rule covered followed the rows while the rule itself kept naming the old ones, which highlights one row on the strength of another, and a validation went on bounding itself by rows that had moved.
+  Both are the quiet kind of wrong this design refuses everywhere else, and both had been reachable since regions could move rows at all.
+  What made it invisible is that the two paths that do move formula text, a cell's own and another sheet's, each track the tags they are inside, and the path for everything outside the rows had no such memory because until now nothing out there needed it.
+  It has one now, in `insideFormula`, which the writer feeds each event.
+  Only text a formula tag opened is moved, because the other text out there is a page header or footer, free text that can read like a reference and would be mangled by moving it.
+
 - **Whether Excel plots a chart from the range or from its own copy of the values (resolved).**
   From the range.
   A chart part carries a cached copy of everything each series read, the way a pivot cache does, and we move the ranges and leave the copy alone.
